@@ -1,8 +1,9 @@
+psycopg[binary]
+psycopg2-binary
+alembic
+sqlalchemy
 fastapi
 uvicorn[standard]
-sqlalchemy
-psycopg[binary]
-alembic
 pydantic
 pydantic-settings
 python-dotenv
