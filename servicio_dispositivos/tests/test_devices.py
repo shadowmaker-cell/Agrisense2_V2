@@ -1,3 +1,5 @@
+import os
+os.environ["DATABASE_URL"] = "sqlite:///./test.db"
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -6,7 +8,7 @@ from app.main import app
 from app.database import Base, get_db
 from app.models.device import TipoDispositivo
 
-
+# ── Base de datos en memoria para tests ───────────────
 SQLALCHEMY_TEST_URL = "sqlite:///./test.db"
 
 engine_test = create_engine(
@@ -32,7 +34,6 @@ def setup_function():
     """Crea las tablas y datos base antes de cada test."""
     Base.metadata.create_all(bind=engine_test)
     db = SesionTest()
-    # Inserta un tipo de sensor de prueba
     tipo = TipoDispositivo(
         nombre="Sensor de Prueba",
         categoria="suelo",
@@ -98,7 +99,6 @@ def test_registrar_dispositivo_serial_duplicado():
         "estado": "activo"
     }
     client.post("/api/v1/dispositivos/", json=payload)
-    # Intenta registrar otro con el mismo serial
     payload["id_logico"] = "TEST_HUM_02"
     respuesta = client.post("/api/v1/dispositivos/", json=payload)
     assert respuesta.status_code == 400
@@ -113,7 +113,6 @@ def test_registrar_dispositivo_id_logico_duplicado():
         "estado": "activo"
     }
     client.post("/api/v1/dispositivos/", json=payload)
-    # Intenta registrar otro con el mismo id_logico
     payload["numero_serial"] = "SN-TEST-002"
     respuesta = client.post("/api/v1/dispositivos/", json=payload)
     assert respuesta.status_code == 400
@@ -139,7 +138,6 @@ def test_listar_dispositivos():
 
 
 def test_obtener_dispositivo_existente():
-    # Primero registra uno
     payload = {
         "tipo_dispositivo_id": 1,
         "id_logico": "TEST_HUM_01",
@@ -147,7 +145,6 @@ def test_obtener_dispositivo_existente():
         "estado": "activo"
     }
     creado = client.post("/api/v1/dispositivos/", json=payload).json()
-    # Luego lo consulta
     respuesta = client.get(f"/api/v1/dispositivos/{creado['id']}")
     assert respuesta.status_code == 200
     assert respuesta.json()["id_logico"] == "TEST_HUM_01"
@@ -167,7 +164,6 @@ def test_actualizar_estado_dispositivo():
         "estado": "activo"
     }
     creado = client.post("/api/v1/dispositivos/", json=payload).json()
-    # Cambia el estado
     respuesta = client.put(
         f"/api/v1/dispositivos/{creado['id']}",
         json={"estado": "mantenimiento"}
@@ -184,7 +180,6 @@ def test_no_puede_modificar_serial():
         "estado": "activo"
     }
     creado = client.post("/api/v1/dispositivos/", json=payload).json()
-    # Intenta cambiar el serial
     respuesta = client.put(
         f"/api/v1/dispositivos/{creado['id']}",
         json={"numero_serial": "SN-HACK-999"}
