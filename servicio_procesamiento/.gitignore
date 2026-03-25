@@ -6,4 +6,6 @@ __pycache__/
 *.egg-info/
 dist/
 .DS_Store
+test_procesamiento.db
+test_ingesta.db
 test.db
