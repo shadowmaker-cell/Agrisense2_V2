@@ -1,0 +1,95 @@
+version: "3.9"
+
+services:
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - servicio-dispositivos
+      - servicio-ingesta
+    restart: on-failure
+
+  servicio-dispositivos:
+    build: ./servicio_dispositivos
+    expose:
+      - "8001"
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql://postgres:1234@postgres-dispositivos:5432/device_db
+      BROKER_URL: kafka:9092
+      JWT_SECRET: ${JWT_SECRET}
+      REFRESH_SECRET: ${REFRESH_SECRET}
+    depends_on:
+      postgres-dispositivos:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    restart: on-failure
+
+  servicio-ingesta:
+    build: ./servicio_ingesta
+    expose:
+      - "8002"
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql://postgres:1234@postgres-ingesta:5432/ingesta_db
+      BROKER_URL: kafka:9092
+      DEVICE_SERVICE_URL: http://servicio-dispositivos:8001
+      JWT_SECRET: ${JWT_SECRET}
+      REFRESH_SECRET: ${REFRESH_SECRET}
+    depends_on:
+      postgres-ingesta:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    restart: on-failure
+
+  postgres-dispositivos:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "1234"
+      POSTGRES_DB: device_db
+    volumes:
+      - postgres_dispositivos_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres-ingesta:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "1234"
+      POSTGRES_DB: ingesta_db
+    volumes:
+      - postgres_ingesta_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    depends_on: [zookeeper]
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+volumes:
+  postgres_dispositivos_data:
+  postgres_ingesta_data:

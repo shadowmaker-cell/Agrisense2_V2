@@ -10,6 +10,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-EXPOSE 8001
+EXPOSE 8002
 
-CMD ["sh", "-c", "sleep 5 && alembic upgrade head && python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port 8001"]
+CMD ["sh", "-c", "sleep 5 && alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8002"]
