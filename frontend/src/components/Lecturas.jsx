@@ -63,7 +63,6 @@ export default function Lecturas() {
     const interval = setInterval(async () => {
       const val = parseFloat((Math.random() * (sensorSel.max - sensorSel.min) + sensorSel.min).toFixed(2))
       try {
-        // 1. Enviar a ingesta
         await ingestaAPI.enviarLectura({
           dispositivo_id: 1,
           id_logico: sensorSel.id,
@@ -71,7 +70,6 @@ export default function Lecturas() {
           valor_metrica: val,
           unidad: sensorSel.unit,
         })
-        // 2. Procesar directamente sin esperar Kafka
         const resultado = await procesamientoAPI.procesarManual({
           dispositivo_id: 1,
           id_logico: sensorSel.id,
@@ -79,7 +77,6 @@ export default function Lecturas() {
           valor_metrica: val,
           unidad: sensorSel.unit,
         })
-        // 3. Si hay alertas generar notificacion
         if (resultado.data.alertas_generadas > 0) {
           const tipos = resultado.data.tipos_alerta
           await notificacionesAPI.enviar({
@@ -105,7 +102,6 @@ export default function Lecturas() {
     if (isNaN(val)) { setSimMsg('Ingresa un valor numerico'); return }
     setSimMsg('')
     try {
-      // 1. Enviar lectura a ingesta
       await ingestaAPI.enviarLectura({
         dispositivo_id: 1,
         id_logico: sensorSel.id,
@@ -113,7 +109,6 @@ export default function Lecturas() {
         valor_metrica: val,
         unidad: sensorSel.unit,
       })
-      // 2. Procesar directamente en Stream Processor sin esperar Kafka
       const resultado = await procesamientoAPI.procesarManual({
         dispositivo_id: 1,
         id_logico: sensorSel.id,
@@ -121,7 +116,6 @@ export default function Lecturas() {
         valor_metrica: val,
         unidad: sensorSel.unit,
       })
-      // 3. Si hay alertas enviar notificacion
       if (resultado.data.alertas_generadas > 0) {
         const tipos = resultado.data.tipos_alerta
         await notificacionesAPI.enviar({
@@ -150,7 +144,6 @@ export default function Lecturas() {
   const avg     = lecturas.length ? (lecturas.reduce((s, l) => s + l.valor, 0) / lecturas.length).toFixed(1) : '—'
   const max     = lecturas.length ? Math.max(...lecturas.map(l => l.valor)).toFixed(1) : '—'
   const min     = lecturas.length ? Math.min(...lecturas.map(l => l.valor)).toFixed(1) : '—'
-
   const alertasFiltradas = filtroSev === 'todos' ? alertas : alertas.filter(a => a.severidad === filtroSev)
 
   return (
@@ -179,7 +172,6 @@ export default function Lecturas() {
         </div>
       </div>
 
-      {/* Sensor selector */}
       <div style={styles.sensorGrid}>
         {SENSOR_OPTIONS.map(s => (
           <button key={s.id} onClick={() => setSensorSel(s)} style={{
@@ -194,7 +186,6 @@ export default function Lecturas() {
         ))}
       </div>
 
-      {/* Stats */}
       <div style={styles.statsRow}>
         {[
           { label: 'Ultimo valor', val: `${lastVal ?? '—'} ${sensorSel.unit}`, color: sensorSel.color },
@@ -210,7 +201,6 @@ export default function Lecturas() {
         ))}
       </div>
 
-      {/* Chart full width */}
       <div className="card" style={{ marginBottom: '20px' }}>
         <div style={styles.chartHeader}>
           <div style={styles.chartTitle}>{sensorSel.label} — Ultimas {lecturas.length} lecturas</div>
@@ -248,9 +238,7 @@ export default function Lecturas() {
         )}
       </div>
 
-      {/* Bottom: simulator + alertas */}
       <div style={styles.bottomGrid}>
-        {/* Simulator */}
         <div className="card" style={{ flex: 1 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
             <div style={styles.chartTitle}>Simular lectura</div>
@@ -279,7 +267,6 @@ export default function Lecturas() {
           )}
         </div>
 
-        {/* Alertas del sensor con filtro */}
         <div className="card" style={{ flex: 1 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
             <div style={styles.chartTitle}>Alertas de {sensorSel.id}</div>

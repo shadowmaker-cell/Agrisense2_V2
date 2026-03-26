@@ -13,26 +13,23 @@ export default function Notificaciones() {
   const [leidas, setLeidas]             = useState(new Set())
   const [activeTab, setActiveTab]       = useState('lista')
 
-  // Envio manual
   const [envioForm, setEnvioForm] = useState({
     dispositivo_id: 1, id_logico: 'AIR_TEMP_01',
     tipo_alerta: 'helada', tipo_metrica: 'temperatura_aire',
     valor: -3.0, condicion: '< 0C — Helada inminente',
     severidad: 'critica', canal: 'push',
   })
-  const [envioMsg, setEnvioMsg]     = useState('')
+  const [envioMsg, setEnvioMsg]         = useState('')
   const [envioLoading, setEnvioLoading] = useState(false)
 
-  // Preferencias
   const [prefs, setPrefs] = useState({
     canal_preferido: 'sistema', activo: true,
     alertas_criticas: true, alertas_altas: true,
     alertas_medias: false, alertas_bajas: false,
   })
-  const [prefsMsg, setPrefsMsg]       = useState('')
+  const [prefsMsg, setPrefsMsg]         = useState('')
   const [prefsLoading, setPrefsLoading] = useState(false)
 
-  // Por dispositivo
   const [idLogicoBuscar, setIdLogicoBuscar] = useState('')
   const [notifsSensor, setNotifsSensor]     = useState([])
   const [buscarMsg, setBuscarMsg]           = useState('')
@@ -85,19 +82,19 @@ export default function Notificaciones() {
 
   const handleBuscarSensor = async () => {
     if (!idLogicoBuscar.trim()) return
-    setBuscarMsg('')
+    setBuscarMsg(''); setNotifsSensor([])
     try {
       const res = await notificacionesAPI.porDispositivo(idLogicoBuscar.trim())
       setNotifsSensor(res.data)
       if (res.data.length === 0) setBuscarMsg('Sin notificaciones para ese sensor')
-    } catch(e) { setBuscarMsg('Sensor sin notificaciones registradas'); setNotifsSensor([]) }
+    } catch(e) { setBuscarMsg('Sensor sin notificaciones registradas') }
   }
 
   const TABS = [
-    { id: 'lista',      label: 'Historial'    },
-    { id: 'sensor',     label: 'Por sensor'   },
-    { id: 'enviar',     label: 'Enviar alerta'},
-    { id: 'preferencias', label: 'Preferencias'},
+    { id: 'lista',        label: 'Historial'     },
+    { id: 'sensor',       label: 'Por sensor'    },
+    { id: 'enviar',       label: 'Enviar alerta' },
+    { id: 'preferencias', label: 'Preferencias'  },
   ]
 
   return (
@@ -115,7 +112,6 @@ export default function Notificaciones() {
         </button>
       </div>
 
-      {/* Resumen */}
       {resumen && (
         <div style={styles.resumenGrid}>
           {[
@@ -133,7 +129,6 @@ export default function Notificaciones() {
         </div>
       )}
 
-      {/* Tabs */}
       <div style={styles.tabsBar}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
@@ -190,13 +185,15 @@ export default function Notificaciones() {
                 return (
                   <div key={n.id} style={{
                     ...styles.notifCard,
-                    opacity: isLeida ? 0.55 : 1,
+                    opacity:    isLeida ? 0.55 : 1,
                     borderLeft: `4px solid ${isLeida ? '#374151' : sevColor}`,
                     animationDelay: `${i * 0.03}s`,
                   }} className="animate-fade">
                     <div style={styles.notifLeft}>
                       <div style={styles.notifTop}>
-                        <span style={{ ...styles.sevBadge, color: sevColor, background: `${sevColor}12`, border: `1px solid ${sevColor}35` }}>{n.severidad?.toUpperCase()}</span>
+                        <span style={{ ...styles.sevBadge, color: sevColor, background: `${sevColor}12`, border: `1px solid ${sevColor}35` }}>
+                          {n.severidad?.toUpperCase()}
+                        </span>
                         <span style={styles.canalTag}>{CANAL_ICON[n.canal] || ''} {n.canal}</span>
                         <span style={{ fontSize: '11px', fontWeight: 600, color: n.estado === 'enviada' ? '#22c55e' : n.estado === 'fallida' ? '#f87171' : '#fbbf24' }}>
                           {n.estado === 'enviada' ? 'Enviada' : n.estado === 'fallida' ? 'Fallida' : 'Pendiente'}
@@ -225,7 +222,7 @@ export default function Notificaciones() {
 
       {/* ── TAB: Por sensor ── */}
       {activeTab === 'sensor' && (
-        <div style={styles.sensorPanel}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={styles.sectionTitle}>Buscar notificaciones por sensor</div>
           <div style={styles.buscarRow}>
             <input
@@ -237,7 +234,7 @@ export default function Notificaciones() {
             />
             <button onClick={handleBuscarSensor} className="btn btn-primary">Buscar</button>
           </div>
-          {buscarMsg && <div style={{ fontSize: '13px', color: '#6b7280', margin: '10px 0' }}>{buscarMsg}</div>}
+          {buscarMsg && <div style={{ fontSize: '13px', color: '#6b7280' }}>{buscarMsg}</div>}
           {notifsSensor.length > 0 && (
             <div style={styles.notifList}>
               {notifsSensor.map((n, i) => {
@@ -269,16 +266,16 @@ export default function Notificaciones() {
         <div style={styles.formCard}>
           <div style={styles.sectionTitle}>Enviar notificacion manual</div>
           <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '20px' }}>
-            Genera una notificacion directamente hacia el agricultor sin pasar por el flujo de Kafka.
+            Genera una notificacion directamente sin pasar por el flujo de Kafka.
           </p>
           <form onSubmit={handleEnviar} style={styles.envioGrid}>
             {[
-              { label: 'Dispositivo ID', key: 'dispositivo_id', type: 'number', placeholder: '1' },
-              { label: 'ID Logico',      key: 'id_logico',      type: 'text',   placeholder: 'AIR_TEMP_01' },
-              { label: 'Tipo de alerta', key: 'tipo_alerta',    type: 'text',   placeholder: 'helada' },
-              { label: 'Tipo metrica',   key: 'tipo_metrica',   type: 'text',   placeholder: 'temperatura_aire' },
-              { label: 'Valor',          key: 'valor',          type: 'number', placeholder: '-3.0', step: '0.1' },
-              { label: 'Condicion',      key: 'condicion',      type: 'text',   placeholder: '< 0C — Helada inminente' },
+              { label: 'Dispositivo ID', key: 'dispositivo_id', type: 'number', placeholder: '1'                         },
+              { label: 'ID Logico',      key: 'id_logico',      type: 'text',   placeholder: 'AIR_TEMP_01'               },
+              { label: 'Tipo de alerta', key: 'tipo_alerta',    type: 'text',   placeholder: 'helada'                    },
+              { label: 'Tipo metrica',   key: 'tipo_metrica',   type: 'text',   placeholder: 'temperatura_aire'          },
+              { label: 'Valor',          key: 'valor',          type: 'number', placeholder: '-3.0', step: '0.1'         },
+              { label: 'Condicion',      key: 'condicion',      type: 'text',   placeholder: '< 0C — Helada inminente'   },
             ].map(field => (
               <div key={field.key} style={styles.fieldGroup}>
                 <label style={styles.label}>{field.label}</label>
@@ -287,7 +284,10 @@ export default function Notificaciones() {
                   step={field.step}
                   placeholder={field.placeholder}
                   value={envioForm[field.key]}
-                  onChange={e => setEnvioForm(p => ({ ...p, [field.key]: field.type === 'number' ? parseFloat(e.target.value) || e.target.value : e.target.value }))}
+                  onChange={e => setEnvioForm(p => ({
+                    ...p,
+                    [field.key]: field.type === 'number' ? parseFloat(e.target.value) || e.target.value : e.target.value
+                  }))}
                   style={styles.input}
                 />
               </div>
@@ -337,14 +337,13 @@ export default function Notificaciones() {
                 <option value="sms">SMS</option>
               </select>
             </div>
-
             <div style={styles.prefsGrid}>
               {[
-                { key: 'activo',           label: 'Notificaciones activas',       desc: 'Recibir notificaciones del sistema' },
-                { key: 'alertas_criticas', label: 'Alertas criticas',             desc: 'Heladas, sequias extremas, fallos criticos' },
-                { key: 'alertas_altas',    label: 'Alertas altas',                desc: 'Condiciones que requieren atencion pronta' },
-                { key: 'alertas_medias',   label: 'Alertas medias',               desc: 'Condiciones a monitorear' },
-                { key: 'alertas_bajas',    label: 'Alertas bajas',                desc: 'Informacion general del sistema' },
+                { key: 'activo',           label: 'Notificaciones activas', desc: 'Recibir notificaciones del sistema'        },
+                { key: 'alertas_criticas', label: 'Alertas criticas',       desc: 'Heladas, sequias extremas, fallos criticos' },
+                { key: 'alertas_altas',    label: 'Alertas altas',          desc: 'Condiciones que requieren atencion pronta'  },
+                { key: 'alertas_medias',   label: 'Alertas medias',         desc: 'Condiciones a monitorear'                  },
+                { key: 'alertas_bajas',    label: 'Alertas bajas',          desc: 'Informacion general del sistema'           },
               ].map(item => (
                 <div key={item.key} style={styles.prefItem} onClick={() => setPrefs(p => ({ ...p, [item.key]: !p[item.key] }))}>
                   <div style={{ flex: 1 }}>
@@ -357,7 +356,6 @@ export default function Notificaciones() {
                 </div>
               ))}
             </div>
-
             <div>
               <button type="submit" disabled={prefsLoading} style={{ ...styles.submitBtn, width: 'auto', padding: '10px 28px' }}>
                 {prefsLoading ? 'Guardando...' : 'Guardar preferencias'}
@@ -400,8 +398,7 @@ const styles = {
   metaDot: { color: '#374151', fontSize: '11px' },
   metaItem: { fontSize: '11px', color: '#4b5563' },
   leerBtn: { marginLeft: '16px', padding: '7px 14px', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '8px', color: '#22c55e', fontSize: '12px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' },
-  sensorPanel: { display: 'flex', flexDirection: 'column', gap: '16px' },
-  sectionTitle: { fontFamily: "'Syne', sans-serif", fontSize: '15px', fontWeight: 600, color: '#f0fdf4', marginBottom: '4px' },
+  sectionTitle: { fontFamily: "'Syne', sans-serif", fontSize: '15px', fontWeight: 600, color: '#f0fdf4' },
   buscarRow: { display: 'flex', gap: '10px' },
   buscarInput: { flex: 1, padding: '10px 14px', background: '#0d1510', border: '1px solid rgba(34,197,94,0.15)', borderRadius: '8px', color: '#f0fdf4', fontSize: '13px', fontFamily: "'DM Sans', sans-serif" },
   formCard: { background: '#0d1510', border: '1px solid rgba(34,197,94,0.15)', borderRadius: '16px', padding: '24px' },
@@ -409,9 +406,9 @@ const styles = {
   fieldGroup: { display: 'flex', flexDirection: 'column', gap: '5px' },
   label: { fontSize: '11px', fontWeight: 500, color: '#86efac', letterSpacing: '0.4px' },
   input: { padding: '9px 12px', background: 'rgba(6,12,7,0.8)', border: '1px solid rgba(34,197,94,0.15)', borderRadius: '8px', color: '#f0fdf4', fontSize: '13px', fontFamily: "'DM Sans', sans-serif" },
-  submitBtn: { width: '100%', padding: '10px', background: 'linear-gradient(135deg, #16a34a, #15803d)', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" },
+  submitBtn: { padding: '10px', background: 'linear-gradient(135deg, #16a34a, #15803d)', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" },
   prefsGrid: { display: 'flex', flexDirection: 'column', gap: '8px' },
-  prefItem: { display: 'flex', alignItems: 'center', gap: '14px', padding: '12px 16px', background: 'rgba(6,12,7,0.6)', borderRadius: '10px', border: '1px solid rgba(34,197,94,0.08)', cursor: 'pointer', transition: 'border-color 0.15s' },
+  prefItem: { display: 'flex', alignItems: 'center', gap: '14px', padding: '12px 16px', background: 'rgba(6,12,7,0.6)', borderRadius: '10px', border: '1px solid rgba(34,197,94,0.08)', cursor: 'pointer' },
   toggle: { width: '44px', height: '24px', borderRadius: '12px', position: 'relative', transition: 'background 0.2s', flexShrink: 0 },
   toggleThumb: { position: 'absolute', top: '2px', width: '20px', height: '20px', borderRadius: '50%', background: '#fff', transition: 'transform 0.2s' },
   empty: { textAlign: 'center', padding: '80px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center' },

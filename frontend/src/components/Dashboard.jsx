@@ -86,8 +86,6 @@ export default function Dashboard() {
     try {
       for (const s of SENSORES_SIM) {
         const valor = parseFloat((Math.random() * (s.max - s.min) + s.min).toFixed(2))
-
-        // 1. Enviar lectura a ingesta
         await ingestaAPI.enviarLectura({
           dispositivo_id: 1,
           id_logico: s.id,
@@ -95,8 +93,6 @@ export default function Dashboard() {
           valor_metrica: valor,
           unidad: s.unit,
         })
-
-        // 2. Procesar directamente en Stream Processor sin esperar Kafka
         const resultado = await procesamientoAPI.procesarManual({
           dispositivo_id: 1,
           id_logico: s.id,
@@ -104,8 +100,6 @@ export default function Dashboard() {
           valor_metrica: valor,
           unidad: s.unit,
         })
-
-        // 3. Si hay alertas generar notificacion
         if (resultado.data.alertas_generadas > 0) {
           alertasTotal += resultado.data.alertas_generadas
           const tipos = resultado.data.tipos_alerta
@@ -133,7 +127,6 @@ export default function Dashboard() {
   }
 
   const activos = dispositivos.filter(d => d.estado === 'activo').length
-
   const distData = [
     { label: 'Suelo',     count: dispositivos.filter(d => d.tipo_dispositivo_id <= 4).length,                                 color: '#22c55e', bg: 'rgba(34,197,94,0.12)'   },
     { label: 'Ambiental', count: dispositivos.filter(d => d.tipo_dispositivo_id >= 5 && d.tipo_dispositivo_id <= 9).length,   color: '#60a5fa', bg: 'rgba(96,165,250,0.12)'  },
@@ -161,7 +154,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Services */}
       <div style={styles.servicesRow}>
         {[
           { nombre: 'Dispositivos',   status: services.dispositivos   },
@@ -179,7 +171,6 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* KPIs */}
       {loading ? (
         <div style={styles.kpiGrid}>
           {[...Array(6)].map((_, i) => <div key={i} className="skeleton" style={{ height: '150px', borderRadius: '16px' }} />)}
@@ -201,7 +192,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Bottom grid */}
       <div style={styles.bottomGrid}>
         <div className="card" style={{ flex: 1 }}>
           <div style={styles.cardTitle}>Distribucion de Sensores</div>
@@ -254,26 +244,14 @@ const styles = {
   title: { fontFamily: "'Syne', sans-serif", fontSize: '26px', fontWeight: 700, color: '#f0fdf4' },
   subtitle: { fontSize: '13px', color: '#6b7280', marginTop: '4px' },
   headerRight: { display: 'flex', alignItems: 'center', gap: '12px' },
-  simBtn: {
-    display: 'flex', alignItems: 'center', gap: '7px',
-    padding: '9px 16px', borderRadius: '10px',
-    background: 'rgba(34,197,94,0.12)', color: '#22c55e',
-    fontSize: '12px', fontWeight: 600, cursor: 'pointer',
-    fontFamily: "'DM Sans', sans-serif", transition: 'all 0.2s',
-    border: '1px solid rgba(34,197,94,0.25)',
-  },
+  simBtn: { display: 'flex', alignItems: 'center', gap: '7px', padding: '9px 16px', borderRadius: '10px', background: 'rgba(34,197,94,0.12)', color: '#22c55e', fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", transition: 'all 0.2s', border: '1px solid rgba(34,197,94,0.25)' },
   spinner: { width: '14px', height: '14px', border: '2px solid rgba(34,197,94,0.3)', borderTop: '2px solid #22c55e', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block' },
   servicesRow: { display: 'flex', gap: '10px', marginBottom: '24px', flexWrap: 'wrap' },
   serviceBadge: { display: 'flex', alignItems: 'center', gap: '7px', background: '#0d1510', border: '1px solid rgba(34,197,94,0.1)', borderRadius: '8px', padding: '7px 14px' },
   serviceDot: { width: '8px', height: '8px', borderRadius: '50%' },
   serviceNombre: { fontSize: '12px', color: '#9ca3af' },
   kpiGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' },
-  kpiCard: {
-    background: '#0d1510', border: '1px solid rgba(34,197,94,0.1)',
-    borderRadius: '16px', padding: '24px 20px',
-    display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center',
-    animation: 'fadeIn 0.4s ease both',
-  },
+  kpiCard: { background: '#0d1510', border: '1px solid rgba(34,197,94,0.1)', borderRadius: '16px', padding: '24px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', animation: 'fadeIn 0.4s ease both' },
   kpiIconWrap: { width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '14px' },
   kpiValue: { fontFamily: "'Syne', sans-serif", fontSize: '40px', fontWeight: 800, lineHeight: 1, marginBottom: '6px' },
   kpiTitle: { fontSize: '13px', fontWeight: 600, color: '#f0fdf4', marginBottom: '3px' },
