@@ -12,6 +12,7 @@ services:
       - servicio-dispositivos
       - servicio-ingesta
       - servicio-procesamiento
+      - servicio-notificaciones
     restart: on-failure
 
   servicio-dispositivos:
@@ -69,6 +70,25 @@ services:
         condition: service_started
     restart: on-failure
 
+  servicio-notificaciones:
+    build: ./servicio_notificaciones
+    expose:
+      - "8004"
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql://postgres:1234@postgres-notificaciones:5432/notificaciones_db
+      BROKER_URL: kafka:9092
+      KAFKA_GROUP_ID: notification-service-group
+      DEVICE_SERVICE_URL: http://servicio-dispositivos:8001
+      JWT_SECRET: ${JWT_SECRET}
+      REFRESH_SECRET: ${REFRESH_SECRET}
+    depends_on:
+      postgres-notificaciones:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    restart: on-failure
+
   postgres-dispositivos:
     image: postgres:16-alpine
     environment:
@@ -111,6 +131,20 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres-notificaciones:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "1234"
+      POSTGRES_DB: notificaciones_db
+    volumes:
+      - postgres_notificaciones_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
     environment:
@@ -129,3 +163,4 @@ volumes:
   postgres_dispositivos_data:
   postgres_ingesta_data:
   postgres_procesamiento_data:
+  postgres_notificaciones_data:
