@@ -2,6 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime, timezone
+import httpx
+import os
+
 from app.database import get_db
 from app.models.lectura import LecturaSensor, LoteIngesta, ErrorIngesta
 from app.schemas.lectura import (
@@ -15,9 +18,10 @@ from app.events.producer import publish_telemetry_raw, publish_alert_generated, 
 
 router = APIRouter(prefix="/api/v1/telemetria", tags=["telemetria"])
 
-
 _contadores = {}
 LIMITE_POR_MINUTO = 60
+
+DEVICE_SERVICE_URL = os.getenv("DEVICE_SERVICE_URL", "http://localhost:8001")
 
 
 def verificar_rate_limit(id_logico: str) -> bool:
@@ -25,33 +29,62 @@ def verificar_rate_limit(id_logico: str) -> bool:
     ahora = datetime.now(timezone.utc)
     minuto_actual = ahora.strftime("%Y%m%d%H%M")
     clave = f"{id_logico}:{minuto_actual}"
-
     _contadores[clave] = _contadores.get(clave, 0) + 1
-
-
     claves_viejas = [k for k in _contadores if not k.endswith(minuto_actual)]
     for k in claves_viejas:
         del _contadores[k]
-
     return _contadores[clave] <= LIMITE_POR_MINUTO
 
 
+def verificar_estado_dispositivo(id_logico: str) -> tuple[bool, str]:
+    """
+    Consulta el servicio de dispositivos para verificar
+    que el sensor este activo antes de aceptar lecturas.
+    Retorna (permitido, motivo).
+    """
+    try:
+        url = f"{DEVICE_SERVICE_URL}/api/v1/dispositivos/"
+        response = httpx.get(url, timeout=3.0)
+        if response.status_code == 200:
+            dispositivos = response.json()
+            dispositivo = next(
+                (d for d in dispositivos if d.get("id_logico") == id_logico),
+                None
+            )
+            if dispositivo is None:
+                # Si no existe en el catalogo lo dejamos pasar
+                return True, ""
+            estado = dispositivo.get("estado", "activo")
+            if estado != "activo":
+                return False, f"Dispositivo {id_logico} esta en estado '{estado}' — lecturas rechazadas"
+    except Exception:
+        # Si el servicio no responde, dejamos pasar la lectura
+        pass
+    return True, ""
+
+
 def procesar_una_lectura(lectura_data: LecturaEntrada, db: Session, lote_id: int = None):
-    """Procesa una lectura individual: valida, persiste, detecta alertas."""
+    """Procesa una lectura individual: valida estado, valida rango, persiste, detecta alertas."""
 
+    # 1. Verificar rate limit
     if not verificar_rate_limit(lectura_data.id_logico):
-        return None, "rate_limit", f"{lectura_data.id_logico} excedió {LIMITE_POR_MINUTO} lecturas/min"
+        return None, "rate_limit", f"{lectura_data.id_logico} excedio {LIMITE_POR_MINUTO} lecturas/min"
 
+    # 2. Verificar estado del dispositivo
+    permitido, motivo = verificar_estado_dispositivo(lectura_data.id_logico)
+    if not permitido:
+        return None, "dispositivo_inactivo", motivo
 
+    # 3. Validar rango de la metrica
     bandera, razon_error = validar_lectura(
         lectura_data.tipo_metrica,
         lectura_data.valor_metrica
     )
 
-  
+    # 4. Normalizar timestamp
     ts = normalizar_timestamp(lectura_data.timestamp_lectura)
 
-  
+    # 5. Persistir lectura
     lectura = LecturaSensor(
         dispositivo_id=lectura_data.dispositivo_id,
         id_logico=lectura_data.id_logico,
@@ -67,7 +100,7 @@ def procesar_una_lectura(lectura_data: LecturaEntrada, db: Session, lote_id: int
 
     publish_telemetry_raw(lectura)
 
- 
+    # 6. Detectar alertas
     alertas_detectadas = detectar_alertas(
         lectura_data.tipo_metrica,
         lectura_data.valor_metrica
@@ -81,12 +114,10 @@ def procesar_una_lectura(lectura_data: LecturaEntrada, db: Session, lote_id: int
         alertas_detectadas=alertas_detectadas
     )
 
-
     for alerta in alertas_guardadas:
         publish_alert_generated(alerta)
 
     return lectura, bandera, razon_error
-
 
 
 @router.post("/", response_model=LecturaRespuesta, status_code=201)
@@ -98,7 +129,11 @@ def recibir_lectura(
     lectura, bandera, razon_error = procesar_una_lectura(payload, db)
 
     if lectura is None:
-        raise HTTPException(status_code=429, detail=razon_error)
+        if bandera == "rate_limit":
+            raise HTTPException(status_code=429, detail=razon_error)
+        if bandera == "dispositivo_inactivo":
+            raise HTTPException(status_code=403, detail=razon_error)
+        raise HTTPException(status_code=400, detail=razon_error)
 
     if bandera == "invalido":
         error = ErrorIngesta(
@@ -110,7 +145,6 @@ def recibir_lectura(
     db.commit()
     db.refresh(lectura)
     return lectura
-
 
 
 @router.post("/lote", response_model=LoteRespuesta, status_code=201)
@@ -126,9 +160,8 @@ def recibir_lote(
     db.add(lote)
     db.flush()
 
-    validos = 0
+    validos   = 0
     invalidos = 0
-    alertas_total = 0
 
     for lectura_data in payload.lecturas:
         lectura, bandera, razon_error = procesar_una_lectura(
@@ -152,7 +185,6 @@ def recibir_lote(
 
     db.commit()
     db.refresh(lote)
-
     publish_batch_completed(lote)
 
     return LoteRespuesta(
@@ -161,9 +193,8 @@ def recibir_lote(
         registros_validos=validos,
         registros_invalidos=invalidos,
         estado=lote.estado,
-        alertas_generadas=alertas_total
+        alertas_generadas=0
     )
-
 
 
 @router.get("/ultimas/{id_logico}", response_model=List[LecturaRespuesta])
@@ -172,7 +203,7 @@ def ultimas_lecturas(
     limite: int = 10,
     db: Session = Depends(get_db)
 ):
-    """Retorna las últimas lecturas de un sensor específico."""
+    """Retorna las ultimas lecturas de un sensor especifico."""
     lecturas = db.query(LecturaSensor).filter(
         LecturaSensor.id_logico == id_logico
     ).order_by(
@@ -185,7 +216,6 @@ def ultimas_lecturas(
             detail=f"No se encontraron lecturas para {id_logico}"
         )
     return lecturas
-
 
 
 @router.get("/alertas", response_model=List[AlertaRespuesta])
@@ -202,14 +232,13 @@ def listar_alertas(
     return query.order_by(AlertaGenerada.generada_en.desc()).limit(limite).all()
 
 
-
 @router.get("/alertas/{id_logico}", response_model=List[AlertaRespuesta])
 def alertas_por_dispositivo(
     id_logico: str,
     limite: int = 20,
     db: Session = Depends(get_db)
 ):
-    """Lista alertas de un dispositivo específico."""
+    """Lista alertas de un dispositivo especifico."""
     from app.models.lectura import AlertaGenerada
     alertas = db.query(AlertaGenerada).filter(
         AlertaGenerada.id_logico == id_logico

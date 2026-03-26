@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { ingestaAPI, procesamientoAPI, notificacionesAPI } from '../api/client'
+import { ingestaAPI, procesamientoAPI, notificacionesAPI, dispositivosAPI } from '../api/client'
 
 const SENSOR_OPTIONS = [
   { id: 'SOIL_HUM_01', label: 'Humedad Suelo',    metric: 'humedad_suelo',    color: '#22c55e', unit: '%',    min: 5,   max: 95   },
@@ -58,49 +58,22 @@ export default function Lecturas() {
     loadAlertas(sensorSel)
   }, [sensorSel])
 
-  useEffect(() => {
-    if (!autoSim) return
-    const interval = setInterval(async () => {
-      const val = parseFloat((Math.random() * (sensorSel.max - sensorSel.min) + sensorSel.min).toFixed(2))
-      try {
-        await ingestaAPI.enviarLectura({
-          dispositivo_id: 1,
-          id_logico: sensorSel.id,
-          tipo_metrica: sensorSel.metric,
-          valor_metrica: val,
-          unidad: sensorSel.unit,
-        })
-        const resultado = await procesamientoAPI.procesarManual({
-          dispositivo_id: 1,
-          id_logico: sensorSel.id,
-          tipo_metrica: sensorSel.metric,
-          valor_metrica: val,
-          unidad: sensorSel.unit,
-        })
-        if (resultado.data.alertas_generadas > 0) {
-          const tipos = resultado.data.tipos_alerta
-          await notificacionesAPI.enviar({
-            dispositivo_id: 1,
-            id_logico: sensorSel.id,
-            tipo_alerta: tipos[0],
-            tipo_metrica: sensorSel.metric,
-            valor: val,
-            condicion: `Valor ${val} ${sensorSel.unit} — ${tipos.join(', ')}`,
-            severidad: resultado.data.alertas_generadas > 1 ? 'critica' : 'alta',
-            canal: 'push',
-          })
-        }
-        await loadLecturas(sensorSel)
-        await loadAlertas(sensorSel)
-      } catch(e) { console.error(e) }
-    }, 5000)
-    return () => clearInterval(interval)
-  }, [autoSim, sensorSel])
+useEffect(() => {
+  if (!autoSim) return
+  const interval = setInterval(async () => {
+    // Verificar estado antes de cada lectura automatica
+    try {
+      const disps = await dispositivosAPI.listar(0, 100)
+      const dispositivo = disps.data.find(d => d.id_logico === sensorSel.id)
+      if (dispositivo && dispositivo.estado !== 'activo') {
+        console.warn(`Auto-sim detenido: ${sensorSel.id} esta en estado "${dispositivo.estado}"`)
+        setAutoSim(false)
+        setSimMsg(`⛔ Auto-sim detenido — sensor ${sensorSel.id} no esta activo`)
+        return
+      }
+    } catch(e) {}
 
-  const handleSimular = async () => {
-    const val = parseFloat(simVal)
-    if (isNaN(val)) { setSimMsg('Ingresa un valor numerico'); return }
-    setSimMsg('')
+    const val = parseFloat((Math.random() * (sensorSel.max - sensorSel.min) + sensorSel.min).toFixed(2))
     try {
       await ingestaAPI.enviarLectura({
         dispositivo_id: 1,
@@ -128,17 +101,67 @@ export default function Lecturas() {
           severidad: resultado.data.alertas_generadas > 1 ? 'critica' : 'alta',
           canal: 'push',
         })
-        setSimMsg(`⚠ ${resultado.data.alertas_generadas} alerta(s): ${tipos.join(', ')}`)
-      } else {
-        setSimMsg(`✅ Lectura ${val} ${sensorSel.unit} enviada — sin alertas`)
       }
-      setSimVal('')
-      setTimeout(() => { loadLecturas(sensorSel); loadAlertas(sensorSel) }, 500)
-    } catch(e) {
-      setSimMsg('❌ Error enviando lectura')
-      console.error(e)
+      await loadLecturas(sensorSel)
+      await loadAlertas(sensorSel)
+    } catch(e) { console.error(e) }
+  }, 5000)
+  return () => clearInterval(interval)
+}, [autoSim, sensorSel])
+
+const handleSimular = async () => {
+  const val = parseFloat(simVal)
+  if (isNaN(val)) { setSimMsg('Ingresa un valor numerico'); return }
+  setSimMsg('')
+
+  // Verificar estado del dispositivo antes de enviar
+  try {
+    const disps = await dispositivosAPI.listar(0, 100)
+    const dispositivo = disps.data.find(d => d.id_logico === sensorSel.id)
+    if (dispositivo && dispositivo.estado !== 'activo') {
+      setSimMsg(`❌ Sensor ${sensorSel.id} esta en estado "${dispositivo.estado}" — no puede recibir lecturas`)
+      return
     }
+  } catch(e) {}
+
+  try {
+    await ingestaAPI.enviarLectura({
+      dispositivo_id: 1,
+      id_logico: sensorSel.id,
+      tipo_metrica: sensorSel.metric,
+      valor_metrica: val,
+      unidad: sensorSel.unit,
+    })
+    const resultado = await procesamientoAPI.procesarManual({
+      dispositivo_id: 1,
+      id_logico: sensorSel.id,
+      tipo_metrica: sensorSel.metric,
+      valor_metrica: val,
+      unidad: sensorSel.unit,
+    })
+    if (resultado.data.alertas_generadas > 0) {
+      const tipos = resultado.data.tipos_alerta
+      await notificacionesAPI.enviar({
+        dispositivo_id: 1,
+        id_logico: sensorSel.id,
+        tipo_alerta: tipos[0],
+        tipo_metrica: sensorSel.metric,
+        valor: val,
+        condicion: `Valor ${val} ${sensorSel.unit} — ${tipos.join(', ')}`,
+        severidad: resultado.data.alertas_generadas > 1 ? 'critica' : 'alta',
+        canal: 'push',
+      })
+      setSimMsg(`⚠ ${resultado.data.alertas_generadas} alerta(s): ${tipos.join(', ')}`)
+    } else {
+      setSimMsg(`✅ Lectura ${val} ${sensorSel.unit} enviada — sin alertas`)
+    }
+    setSimVal('')
+    setTimeout(() => { loadLecturas(sensorSel); loadAlertas(sensorSel) }, 500)
+  } catch(e) {
+    setSimMsg('❌ Error enviando lectura')
+    console.error(e)
   }
+}
 
   const lastVal = lecturas[lecturas.length - 1]?.valor
   const avg     = lecturas.length ? (lecturas.reduce((s, l) => s + l.valor, 0) / lecturas.length).toFixed(1) : '—'
