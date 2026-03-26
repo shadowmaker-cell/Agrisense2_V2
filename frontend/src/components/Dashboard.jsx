@@ -29,14 +29,14 @@ function KPICard({ titulo, valor, subtitulo, color, icon, delay = 0 }) {
 }
 
 const SENSORES_SIM = [
-  { id: 'SOIL_HUM_01', metric: 'humedad_suelo',    unit: '%',    min: 5,   max: 95  },
-  { id: 'AIR_TEMP_01', metric: 'temperatura_aire', unit: 'C',    min: -5,  max: 42  },
-  { id: 'SOIL_PH_01',  metric: 'ph_suelo',         unit: 'pH',   min: 4,   max: 9   },
-  { id: 'LUX_01',      metric: 'luz',              unit: 'Lux',  min: 200, max: 8000},
-  { id: 'WIND_01',     metric: 'velocidad_viento', unit: 'km/h', min: 0,   max: 60  },
-  { id: 'RAIN_01',     metric: 'lluvia',           unit: 'mm',   min: 0,   max: 80  },
-  { id: 'BATT_01',     metric: 'voltaje_bateria',  unit: 'V',    min: 3.0, max: 4.2 },
-  { id: 'WAT_PH_01',   metric: 'ph_agua',          unit: 'pH',   min: 5,   max: 8.5 },
+  { id: 'SOIL_HUM_01', metric: 'humedad_suelo',    unit: '%',    min: 5,   max: 95   },
+  { id: 'AIR_TEMP_01', metric: 'temperatura_aire', unit: 'C',    min: -5,  max: 42   },
+  { id: 'SOIL_PH_01',  metric: 'ph_suelo',         unit: 'pH',   min: 4,   max: 9    },
+  { id: 'LUX_01',      metric: 'luz',              unit: 'Lux',  min: 200, max: 8000 },
+  { id: 'WIND_01',     metric: 'velocidad_viento', unit: 'km/h', min: 0,   max: 60   },
+  { id: 'RAIN_01',     metric: 'lluvia',           unit: 'mm',   min: 0,   max: 80   },
+  { id: 'BATT_01',     metric: 'voltaje_bateria',  unit: 'V',    min: 3.0, max: 4.2  },
+  { id: 'WAT_PH_01',   metric: 'ph_agua',          unit: 'pH',   min: 5,   max: 8.5  },
 ]
 
 export default function Dashboard() {
@@ -82,9 +82,12 @@ export default function Dashboard() {
     setSimLoading(true)
     setSimMsg('')
     let enviados = 0
+    let alertasTotal = 0
     try {
       for (const s of SENSORES_SIM) {
         const valor = parseFloat((Math.random() * (s.max - s.min) + s.min).toFixed(2))
+
+        // 1. Enviar lectura a ingesta
         await ingestaAPI.enviarLectura({
           dispositivo_id: 1,
           id_logico: s.id,
@@ -92,25 +95,50 @@ export default function Dashboard() {
           valor_metrica: valor,
           unidad: s.unit,
         })
+
+        // 2. Procesar directamente en Stream Processor sin esperar Kafka
+        const resultado = await procesamientoAPI.procesarManual({
+          dispositivo_id: 1,
+          id_logico: s.id,
+          tipo_metrica: s.metric,
+          valor_metrica: valor,
+          unidad: s.unit,
+        })
+
+        // 3. Si hay alertas generar notificacion
+        if (resultado.data.alertas_generadas > 0) {
+          alertasTotal += resultado.data.alertas_generadas
+          const tipos = resultado.data.tipos_alerta
+          await notificacionesAPI.enviar({
+            dispositivo_id: 1,
+            id_logico: s.id,
+            tipo_alerta: tipos[0],
+            tipo_metrica: s.metric,
+            valor: valor,
+            condicion: `Valor ${valor} ${s.unit} — ${tipos.join(', ')}`,
+            severidad: resultado.data.alertas_generadas > 1 ? 'critica' : 'alta',
+            canal: 'push',
+          })
+        }
         enviados++
       }
-      setSimMsg(`✅ ${enviados} lecturas simuladas enviadas`)
-      setTimeout(load, 1500)
+      setSimMsg(`✅ ${enviados} lecturas enviadas · ${alertasTotal} alertas generadas`)
+      setTimeout(load, 1000)
     } catch(e) {
       setSimMsg('❌ Error enviando datos simulados')
     } finally {
       setSimLoading(false)
-      setTimeout(() => setSimMsg(''), 4000)
+      setTimeout(() => setSimMsg(''), 5000)
     }
   }
 
   const activos = dispositivos.filter(d => d.estado === 'activo').length
 
   const distData = [
-    { label: 'Suelo',     count: dispositivos.filter(d => d.tipo_dispositivo_id <= 4).length,                                  color: '#22c55e', bg: 'rgba(34,197,94,0.12)' },
-    { label: 'Ambiental', count: dispositivos.filter(d => d.tipo_dispositivo_id >= 5 && d.tipo_dispositivo_id <= 9).length,    color: '#60a5fa', bg: 'rgba(96,165,250,0.12)' },
-    { label: 'Agua',      count: dispositivos.filter(d => d.tipo_dispositivo_id >= 10 && d.tipo_dispositivo_id <= 13).length,  color: '#2dd4bf', bg: 'rgba(45,212,191,0.12)' },
-    { label: 'Infra',     count: dispositivos.filter(d => d.tipo_dispositivo_id >= 14).length,                                 color: '#a78bfa', bg: 'rgba(167,139,250,0.12)' },
+    { label: 'Suelo',     count: dispositivos.filter(d => d.tipo_dispositivo_id <= 4).length,                                 color: '#22c55e', bg: 'rgba(34,197,94,0.12)'   },
+    { label: 'Ambiental', count: dispositivos.filter(d => d.tipo_dispositivo_id >= 5 && d.tipo_dispositivo_id <= 9).length,   color: '#60a5fa', bg: 'rgba(96,165,250,0.12)'  },
+    { label: 'Agua',      count: dispositivos.filter(d => d.tipo_dispositivo_id >= 10 && d.tipo_dispositivo_id <= 13).length, color: '#2dd4bf', bg: 'rgba(45,212,191,0.12)'  },
+    { label: 'Infra',     count: dispositivos.filter(d => d.tipo_dispositivo_id >= 14).length,                                color: '#a78bfa', bg: 'rgba(167,139,250,0.12)' },
   ]
 
   return (
@@ -136,9 +164,9 @@ export default function Dashboard() {
       {/* Services */}
       <div style={styles.servicesRow}>
         {[
-          { nombre: 'Dispositivos',   status: services.dispositivos },
-          { nombre: 'Ingesta IoT',    status: 'ok' },
-          { nombre: 'Procesamiento',  status: services.procesamiento },
+          { nombre: 'Dispositivos',   status: services.dispositivos   },
+          { nombre: 'Ingesta IoT',    status: 'ok'                    },
+          { nombre: 'Procesamiento',  status: services.procesamiento  },
           { nombre: 'Notificaciones', status: services.notificaciones },
         ].map(s => (
           <div key={s.nombre} style={styles.serviceBadge}>
@@ -158,22 +186,22 @@ export default function Dashboard() {
         </div>
       ) : (
         <div style={styles.kpiGrid}>
-          <KPICard titulo="Sensores Totales"    valor={dispositivos.length}              subtitulo="Registrados en el sistema"   color="#22c55e" delay={0}
+          <KPICard titulo="Sensores Totales"   valor={dispositivos.length}              subtitulo="Registrados en el sistema"  color="#22c55e" delay={0}
             icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>} />
-          <KPICard titulo="Sensores Activos"    valor={activos}                           subtitulo="Transmitiendo en campo"      color="#4ade80" delay={0.06}
+          <KPICard titulo="Sensores Activos"   valor={activos}                           subtitulo="Transmitiendo en campo"     color="#4ade80" delay={0.06}
             icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>} />
-          <KPICard titulo="Eventos Procesados"  valor={resumenProc?.total_eventos || 0}  subtitulo="Por el Stream Processor"     color="#60a5fa" delay={0.12}
+          <KPICard titulo="Eventos Procesados" valor={resumenProc?.total_eventos || 0}   subtitulo="Por el Stream Processor"    color="#60a5fa" delay={0.12}
             icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>} />
-          <KPICard titulo="Alertas Criticas"    valor={resumenProc?.alertas_criticas||0} subtitulo="Atencion inmediata"          color="#f87171" delay={0.18}
+          <KPICard titulo="Alertas Criticas"   valor={resumenProc?.alertas_criticas||0}  subtitulo="Atencion inmediata"         color="#f87171" delay={0.18}
             icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>} />
-          <KPICard titulo="Alertas Altas"       valor={resumenProc?.alertas_altas||0}    subtitulo="Monitoreo prioritario"       color="#fbbf24" delay={0.24}
+          <KPICard titulo="Alertas Altas"      valor={resumenProc?.alertas_altas||0}     subtitulo="Monitoreo prioritario"      color="#fbbf24" delay={0.24}
             icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>} />
-          <KPICard titulo="Notificaciones"      valor={resumenNotif?.total||0}           subtitulo={`${resumenNotif?.no_leidas||0} sin leer`} color="#a78bfa" delay={0.30}
+          <KPICard titulo="Notificaciones"     valor={resumenNotif?.total||0}            subtitulo={`${resumenNotif?.no_leidas||0} sin leer`} color="#a78bfa" delay={0.30}
             icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>} />
         </div>
       )}
 
-      {/* Bottom grid — equal columns */}
+      {/* Bottom grid */}
       <div style={styles.bottomGrid}>
         <div className="card" style={{ flex: 1 }}>
           <div style={styles.cardTitle}>Distribucion de Sensores</div>
@@ -228,7 +256,7 @@ const styles = {
   headerRight: { display: 'flex', alignItems: 'center', gap: '12px' },
   simBtn: {
     display: 'flex', alignItems: 'center', gap: '7px',
-    padding: '9px 16px', borderRadius: '10px', border: 'none',
+    padding: '9px 16px', borderRadius: '10px',
     background: 'rgba(34,197,94,0.12)', color: '#22c55e',
     fontSize: '12px', fontWeight: 600, cursor: 'pointer',
     fontFamily: "'DM Sans', sans-serif", transition: 'all 0.2s',
@@ -243,8 +271,7 @@ const styles = {
   kpiCard: {
     background: '#0d1510', border: '1px solid rgba(34,197,94,0.1)',
     borderRadius: '16px', padding: '24px 20px',
-    display: 'flex', flexDirection: 'column', alignItems: 'center',
-    textAlign: 'center',
+    display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center',
     animation: 'fadeIn 0.4s ease both',
   },
   kpiIconWrap: { width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '14px' },

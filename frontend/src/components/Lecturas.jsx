@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react'
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
-import { ingestaAPI, procesamientoAPI } from '../api/client'
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { ingestaAPI, procesamientoAPI, notificacionesAPI } from '../api/client'
 
 const SENSOR_OPTIONS = [
-  { id: 'SOIL_HUM_01', label: 'Humedad Suelo',    metric: 'humedad_suelo',    color: '#22c55e', unit: '%',    min: 5,   max: 95  },
-  { id: 'AIR_TEMP_01', label: 'Temperatura Aire', metric: 'temperatura_aire', color: '#f87171', unit: 'C',    min: -5,  max: 42  },
-  { id: 'SOIL_PH_01',  label: 'pH Suelo',         metric: 'ph_suelo',         color: '#a78bfa', unit: 'pH',   min: 4,   max: 9   },
-  { id: 'LUX_01',      label: 'Luz Solar',        metric: 'luz',              color: '#fbbf24', unit: 'Lux',  min: 200, max: 8000},
-  { id: 'WIND_01',     label: 'Viento',           metric: 'velocidad_viento', color: '#60a5fa', unit: 'km/h', min: 0,   max: 60  },
-  { id: 'RAIN_01',     label: 'Lluvia',           metric: 'lluvia',           color: '#818cf8', unit: 'mm',   min: 0,   max: 80  },
+  { id: 'SOIL_HUM_01', label: 'Humedad Suelo',    metric: 'humedad_suelo',    color: '#22c55e', unit: '%',    min: 5,   max: 95   },
+  { id: 'AIR_TEMP_01', label: 'Temperatura Aire', metric: 'temperatura_aire', color: '#f87171', unit: 'C',    min: -5,  max: 42   },
+  { id: 'SOIL_PH_01',  label: 'pH Suelo',         metric: 'ph_suelo',         color: '#a78bfa', unit: 'pH',   min: 4,   max: 9    },
+  { id: 'LUX_01',      label: 'Luz Solar',        metric: 'luz',              color: '#fbbf24', unit: 'Lux',  min: 200, max: 8000 },
+  { id: 'WIND_01',     label: 'Viento',           metric: 'velocidad_viento', color: '#60a5fa', unit: 'km/h', min: 0,   max: 60   },
+  { id: 'RAIN_01',     label: 'Lluvia',           metric: 'lluvia',           color: '#818cf8', unit: 'mm',   min: 0,   max: 80   },
 ]
 
 const SEV_COLOR = { critica: '#f87171', alta: '#fbbf24', media: '#60a5fa', baja: '#22c55e' }
@@ -63,6 +63,7 @@ export default function Lecturas() {
     const interval = setInterval(async () => {
       const val = parseFloat((Math.random() * (sensorSel.max - sensorSel.min) + sensorSel.min).toFixed(2))
       try {
+        // 1. Enviar a ingesta
         await ingestaAPI.enviarLectura({
           dispositivo_id: 1,
           id_logico: sensorSel.id,
@@ -70,8 +71,31 @@ export default function Lecturas() {
           valor_metrica: val,
           unidad: sensorSel.unit,
         })
+        // 2. Procesar directamente sin esperar Kafka
+        const resultado = await procesamientoAPI.procesarManual({
+          dispositivo_id: 1,
+          id_logico: sensorSel.id,
+          tipo_metrica: sensorSel.metric,
+          valor_metrica: val,
+          unidad: sensorSel.unit,
+        })
+        // 3. Si hay alertas generar notificacion
+        if (resultado.data.alertas_generadas > 0) {
+          const tipos = resultado.data.tipos_alerta
+          await notificacionesAPI.enviar({
+            dispositivo_id: 1,
+            id_logico: sensorSel.id,
+            tipo_alerta: tipos[0],
+            tipo_metrica: sensorSel.metric,
+            valor: val,
+            condicion: `Valor ${val} ${sensorSel.unit} — ${tipos.join(', ')}`,
+            severidad: resultado.data.alertas_generadas > 1 ? 'critica' : 'alta',
+            canal: 'push',
+          })
+        }
         await loadLecturas(sensorSel)
-      } catch(e) {}
+        await loadAlertas(sensorSel)
+      } catch(e) { console.error(e) }
     }, 5000)
     return () => clearInterval(interval)
   }, [autoSim, sensorSel])
@@ -81,6 +105,7 @@ export default function Lecturas() {
     if (isNaN(val)) { setSimMsg('Ingresa un valor numerico'); return }
     setSimMsg('')
     try {
+      // 1. Enviar lectura a ingesta
       await ingestaAPI.enviarLectura({
         dispositivo_id: 1,
         id_logico: sensorSel.id,
@@ -88,10 +113,37 @@ export default function Lecturas() {
         valor_metrica: val,
         unidad: sensorSel.unit,
       })
-      setSimMsg(`✅ Lectura ${val} ${sensorSel.unit} enviada`)
+      // 2. Procesar directamente en Stream Processor sin esperar Kafka
+      const resultado = await procesamientoAPI.procesarManual({
+        dispositivo_id: 1,
+        id_logico: sensorSel.id,
+        tipo_metrica: sensorSel.metric,
+        valor_metrica: val,
+        unidad: sensorSel.unit,
+      })
+      // 3. Si hay alertas enviar notificacion
+      if (resultado.data.alertas_generadas > 0) {
+        const tipos = resultado.data.tipos_alerta
+        await notificacionesAPI.enviar({
+          dispositivo_id: 1,
+          id_logico: sensorSel.id,
+          tipo_alerta: tipos[0],
+          tipo_metrica: sensorSel.metric,
+          valor: val,
+          condicion: `Valor ${val} ${sensorSel.unit} — ${tipos.join(', ')}`,
+          severidad: resultado.data.alertas_generadas > 1 ? 'critica' : 'alta',
+          canal: 'push',
+        })
+        setSimMsg(`⚠ ${resultado.data.alertas_generadas} alerta(s): ${tipos.join(', ')}`)
+      } else {
+        setSimMsg(`✅ Lectura ${val} ${sensorSel.unit} enviada — sin alertas`)
+      }
       setSimVal('')
       setTimeout(() => { loadLecturas(sensorSel); loadAlertas(sensorSel) }, 500)
-    } catch(e) { setSimMsg('❌ Error enviando lectura') }
+    } catch(e) {
+      setSimMsg('❌ Error enviando lectura')
+      console.error(e)
+    }
   }
 
   const lastVal = lecturas[lecturas.length - 1]?.valor
@@ -111,8 +163,8 @@ export default function Lecturas() {
         <div style={styles.headerRight}>
           <button onClick={() => setAutoSim(!autoSim)} style={{
             ...styles.autoBtn,
-            background: autoSim ? 'rgba(34,197,94,0.15)' : 'rgba(107,114,128,0.1)',
-            color: autoSim ? '#22c55e' : '#6b7280',
+            background:  autoSim ? 'rgba(34,197,94,0.15)' : 'rgba(107,114,128,0.1)',
+            color:       autoSim ? '#22c55e' : '#6b7280',
             borderColor: autoSim ? 'rgba(34,197,94,0.3)' : 'rgba(107,114,128,0.2)',
           }}>
             <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: autoSim ? '#22c55e' : '#6b7280', animation: autoSim ? 'pulse-green 2s infinite' : 'none' }} />
@@ -132,9 +184,9 @@ export default function Lecturas() {
         {SENSOR_OPTIONS.map(s => (
           <button key={s.id} onClick={() => setSensorSel(s)} style={{
             ...styles.sensorBtn,
-            borderColor:  sensorSel.id === s.id ? s.color : 'rgba(34,197,94,0.1)',
-            background:   sensorSel.id === s.id ? `${s.color}15` : '#0d1510',
-            color:        sensorSel.id === s.id ? s.color : '#6b7280',
+            borderColor: sensorSel.id === s.id ? s.color : 'rgba(34,197,94,0.1)',
+            background:  sensorSel.id === s.id ? `${s.color}15` : '#0d1510',
+            color:       sensorSel.id === s.id ? s.color : '#6b7280',
           }}>
             <div style={{ fontWeight: 700, fontSize: '12px' }}>{s.label}</div>
             <div style={{ fontSize: '10px', fontFamily: 'monospace', opacity: 0.7 }}>{s.id}</div>
@@ -158,7 +210,7 @@ export default function Lecturas() {
         ))}
       </div>
 
-      {/* Chart — full width */}
+      {/* Chart full width */}
       <div className="card" style={{ marginBottom: '20px' }}>
         <div style={styles.chartHeader}>
           <div style={styles.chartTitle}>{sensorSel.label} — Ultimas {lecturas.length} lecturas</div>
@@ -175,7 +227,7 @@ export default function Lecturas() {
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
             </svg>
             <div>Sin datos para {sensorSel.id}</div>
-            <div style={{ fontSize: '11px', marginTop: '4px' }}>Usa el simulador o el boton de datos del Dashboard</div>
+            <div style={{ fontSize: '11px', marginTop: '4px', color: '#4b5563' }}>Usa el simulador o el boton de datos del Dashboard</div>
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={220}>
@@ -196,7 +248,7 @@ export default function Lecturas() {
         )}
       </div>
 
-      {/* Bottom: simulator + alertas side by side */}
+      {/* Bottom: simulator + alertas */}
       <div style={styles.bottomGrid}>
         {/* Simulator */}
         <div className="card" style={{ flex: 1 }}>
@@ -220,7 +272,11 @@ export default function Lecturas() {
             />
             <button onClick={handleSimular} className="btn btn-primary">Enviar</button>
           </div>
-          {simMsg && <div style={{ marginTop: '10px', fontSize: '13px', color: simMsg.includes('✅') ? '#22c55e' : '#f87171' }}>{simMsg}</div>}
+          {simMsg && (
+            <div style={{ marginTop: '10px', fontSize: '13px', color: simMsg.includes('✅') ? '#22c55e' : simMsg.includes('⚠') ? '#fbbf24' : '#f87171' }}>
+              {simMsg}
+            </div>
+          )}
         </div>
 
         {/* Alertas del sensor con filtro */}
@@ -237,7 +293,10 @@ export default function Lecturas() {
           </div>
           {alertasFiltradas.length === 0 ? (
             <div style={styles.noAlertas}>
-              <div style={{ fontSize: '28px', marginBottom: '6px' }}>—</div>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="1.5" style={{ marginBottom: '6px' }}>
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                <polyline points="22 4 12 14.01 9 11.01"/>
+              </svg>
               <div style={{ fontSize: '13px', color: '#4b5563' }}>Sin alertas para este sensor</div>
             </div>
           ) : (
@@ -290,6 +349,6 @@ const styles = {
   simForm: { display: 'flex', gap: '10px' },
   simInput: { flex: 1, padding: '9px 14px', background: 'rgba(6,12,7,0.8)', border: '1px solid rgba(34,197,94,0.15)', borderRadius: '8px', color: '#f0fdf4', fontSize: '13px', fontFamily: "'DM Sans', sans-serif" },
   sevSelect: { padding: '5px 10px', background: '#0d1510', border: '1px solid rgba(34,197,94,0.15)', borderRadius: '8px', color: '#9ca3af', fontSize: '12px', cursor: 'pointer' },
-  noAlertas: { textAlign: 'center', padding: '30px', color: '#4b5563' },
+  noAlertas: { textAlign: 'center', padding: '30px', color: '#4b5563', display: 'flex', flexDirection: 'column', alignItems: 'center' },
   alertItem: { background: 'rgba(6,12,7,0.6)', borderRadius: '6px', padding: '8px 10px' },
 }
