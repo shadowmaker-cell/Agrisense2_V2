@@ -32,6 +32,17 @@ export default function Lecturas() {
   const [simVal, setSimVal]       = useState('')
   const [simMsg, setSimMsg]       = useState('')
   const [autoSim, setAutoSim]     = useState(false)
+  const [activeTab, setActiveTab] = useState('lectura')
+  const [loteRows, setLoteRows]   = useState([
+    { id_logico: 'SOIL_HUM_01', tipo_metrica: 'humedad_suelo',    valor: '', unidad: '%'    },
+    { id_logico: 'AIR_TEMP_01', tipo_metrica: 'temperatura_aire', valor: '', unidad: 'C'    },
+    { id_logico: 'SOIL_PH_01',  tipo_metrica: 'ph_suelo',         valor: '', unidad: 'pH'   },
+    { id_logico: 'LUX_01',      tipo_metrica: 'luz',              valor: '', unidad: 'Lux'  },
+    { id_logico: 'WIND_01',     tipo_metrica: 'velocidad_viento', valor: '', unidad: 'km/h' },
+    { id_logico: 'RAIN_01',     tipo_metrica: 'lluvia',           valor: '', unidad: 'mm'   },
+  ])
+  const [loteMsg, setLoteMsg]         = useState('')
+  const [loteLoading, setLoteLoading] = useState(false)
 
   const loadLecturas = async (sensor) => {
     setLoading(true)
@@ -58,22 +69,71 @@ export default function Lecturas() {
     loadAlertas(sensorSel)
   }, [sensorSel])
 
-useEffect(() => {
-  if (!autoSim) return
-  const interval = setInterval(async () => {
-    // Verificar estado antes de cada lectura automatica
+  useEffect(() => {
+    if (!autoSim) return
+    const interval = setInterval(async () => {
+      // Verificar estado antes de cada lectura automatica
+      try {
+        const disps = await dispositivosAPI.listar(0, 100)
+        const dispositivo = disps.data.find(d => d.id_logico === sensorSel.id)
+        if (dispositivo && dispositivo.estado !== 'activo') {
+          setAutoSim(false)
+          setSimMsg(`⛔ Auto-sim detenido — sensor ${sensorSel.id} no esta activo`)
+          return
+        }
+      } catch(e) {}
+
+      const val = parseFloat((Math.random() * (sensorSel.max - sensorSel.min) + sensorSel.min).toFixed(2))
+      try {
+        await ingestaAPI.enviarLectura({
+          dispositivo_id: 1,
+          id_logico: sensorSel.id,
+          tipo_metrica: sensorSel.metric,
+          valor_metrica: val,
+          unidad: sensorSel.unit,
+        })
+        const resultado = await procesamientoAPI.procesarManual({
+          dispositivo_id: 1,
+          id_logico: sensorSel.id,
+          tipo_metrica: sensorSel.metric,
+          valor_metrica: val,
+          unidad: sensorSel.unit,
+        })
+        if (resultado.data.alertas_generadas > 0) {
+          const tipos = resultado.data.tipos_alerta
+          await notificacionesAPI.enviar({
+            dispositivo_id: 1,
+            id_logico: sensorSel.id,
+            tipo_alerta: tipos[0],
+            tipo_metrica: sensorSel.metric,
+            valor: val,
+            condicion: `Valor ${val} ${sensorSel.unit} — ${tipos.join(', ')}`,
+            severidad: resultado.data.alertas_generadas > 1 ? 'critica' : 'alta',
+            canal: 'push',
+          })
+        }
+        await loadLecturas(sensorSel)
+        await loadAlertas(sensorSel)
+      } catch(e) { console.error(e) }
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [autoSim, sensorSel])
+
+  const handleSimular = async () => {
+    const val = parseFloat(simVal)
+    if (isNaN(val)) { setSimMsg('Ingresa un valor numerico'); return }
+    setSimMsg('')
+
+    // Verificar estado del dispositivo
     try {
       const disps = await dispositivosAPI.listar(0, 100)
       const dispositivo = disps.data.find(d => d.id_logico === sensorSel.id)
       if (dispositivo && dispositivo.estado !== 'activo') {
-        console.warn(`Auto-sim detenido: ${sensorSel.id} esta en estado "${dispositivo.estado}"`)
-        setAutoSim(false)
-        setSimMsg(`⛔ Auto-sim detenido — sensor ${sensorSel.id} no esta activo`)
+        setSimMsg(`❌ Sensor ${sensorSel.id} esta en estado "${dispositivo.estado}" — no puede recibir lecturas`)
         return
       }
     } catch(e) {}
 
-    const val = parseFloat((Math.random() * (sensorSel.max - sensorSel.min) + sensorSel.min).toFixed(2))
     try {
       await ingestaAPI.enviarLectura({
         dispositivo_id: 1,
@@ -101,67 +161,78 @@ useEffect(() => {
           severidad: resultado.data.alertas_generadas > 1 ? 'critica' : 'alta',
           canal: 'push',
         })
+        setSimMsg(`⚠ ${resultado.data.alertas_generadas} alerta(s): ${tipos.join(', ')}`)
+      } else {
+        setSimMsg(`✅ Lectura ${val} ${sensorSel.unit} enviada — sin alertas`)
       }
-      await loadLecturas(sensorSel)
-      await loadAlertas(sensorSel)
-    } catch(e) { console.error(e) }
-  }, 5000)
-  return () => clearInterval(interval)
-}, [autoSim, sensorSel])
-
-const handleSimular = async () => {
-  const val = parseFloat(simVal)
-  if (isNaN(val)) { setSimMsg('Ingresa un valor numerico'); return }
-  setSimMsg('')
-
-  // Verificar estado del dispositivo antes de enviar
-  try {
-    const disps = await dispositivosAPI.listar(0, 100)
-    const dispositivo = disps.data.find(d => d.id_logico === sensorSel.id)
-    if (dispositivo && dispositivo.estado !== 'activo') {
-      setSimMsg(`❌ Sensor ${sensorSel.id} esta en estado "${dispositivo.estado}" — no puede recibir lecturas`)
-      return
+      setSimVal('')
+      setTimeout(() => { loadLecturas(sensorSel); loadAlertas(sensorSel) }, 500)
+    } catch(e) {
+      setSimMsg('❌ Error enviando lectura')
+      console.error(e)
     }
-  } catch(e) {}
-
-  try {
-    await ingestaAPI.enviarLectura({
-      dispositivo_id: 1,
-      id_logico: sensorSel.id,
-      tipo_metrica: sensorSel.metric,
-      valor_metrica: val,
-      unidad: sensorSel.unit,
-    })
-    const resultado = await procesamientoAPI.procesarManual({
-      dispositivo_id: 1,
-      id_logico: sensorSel.id,
-      tipo_metrica: sensorSel.metric,
-      valor_metrica: val,
-      unidad: sensorSel.unit,
-    })
-    if (resultado.data.alertas_generadas > 0) {
-      const tipos = resultado.data.tipos_alerta
-      await notificacionesAPI.enviar({
-        dispositivo_id: 1,
-        id_logico: sensorSel.id,
-        tipo_alerta: tipos[0],
-        tipo_metrica: sensorSel.metric,
-        valor: val,
-        condicion: `Valor ${val} ${sensorSel.unit} — ${tipos.join(', ')}`,
-        severidad: resultado.data.alertas_generadas > 1 ? 'critica' : 'alta',
-        canal: 'push',
-      })
-      setSimMsg(`⚠ ${resultado.data.alertas_generadas} alerta(s): ${tipos.join(', ')}`)
-    } else {
-      setSimMsg(`✅ Lectura ${val} ${sensorSel.unit} enviada — sin alertas`)
-    }
-    setSimVal('')
-    setTimeout(() => { loadLecturas(sensorSel); loadAlertas(sensorSel) }, 500)
-  } catch(e) {
-    setSimMsg('❌ Error enviando lectura')
-    console.error(e)
   }
-}
+
+  const handleEnviarLote = async () => {
+    const filas = loteRows.filter(r => r.valor !== '' && !isNaN(parseFloat(r.valor)))
+    if (filas.length === 0) { setLoteMsg('Ingresa al menos un valor en el lote'); return }
+    setLoteLoading(true); setLoteMsg('')
+    let alertasTotal = 0
+    try {
+      for (const fila of filas) {
+        const val = parseFloat(fila.valor)
+        await ingestaAPI.enviarLectura({
+          dispositivo_id: 1,
+          id_logico: fila.id_logico,
+          tipo_metrica: fila.tipo_metrica,
+          valor_metrica: val,
+          unidad: fila.unidad,
+        })
+        const resultado = await procesamientoAPI.procesarManual({
+          dispositivo_id: 1,
+          id_logico: fila.id_logico,
+          tipo_metrica: fila.tipo_metrica,
+          valor_metrica: val,
+          unidad: fila.unidad,
+        })
+        if (resultado.data.alertas_generadas > 0) {
+          alertasTotal += resultado.data.alertas_generadas
+          const tipos = resultado.data.tipos_alerta
+          await notificacionesAPI.enviar({
+            dispositivo_id: 1,
+            id_logico: fila.id_logico,
+            tipo_alerta: tipos[0],
+            tipo_metrica: fila.tipo_metrica,
+            valor: val,
+            condicion: `Valor ${val} ${fila.unidad} — ${tipos.join(', ')}`,
+            severidad: resultado.data.alertas_generadas > 1 ? 'critica' : 'alta',
+            canal: 'push',
+          })
+        }
+      }
+      setLoteMsg(`✅ ${filas.length} lecturas enviadas · ${alertasTotal} alertas generadas`)
+      setLoteRows(prev => prev.map(r => ({ ...r, valor: '' })))
+      setTimeout(() => { loadLecturas(sensorSel); loadAlertas(sensorSel) }, 500)
+    } catch(e) {
+      setLoteMsg('❌ Error enviando lote')
+    } finally {
+      setLoteLoading(false)
+      setTimeout(() => setLoteMsg(''), 5000)
+    }
+  }
+
+  const generarLoteAleatorio = () => {
+    const rangos = {
+      'SOIL_HUM_01': [5,  95],  'AIR_TEMP_01': [-5, 42],
+      'SOIL_PH_01':  [4,  9],   'LUX_01':      [200, 8000],
+      'WIND_01':     [0,  60],  'RAIN_01':     [0,  80],
+    }
+    setLoteRows(prev => prev.map(r => {
+      const rango = rangos[r.id_logico] || [0, 100]
+      const val   = parseFloat((Math.random() * (rango[1] - rango[0]) + rango[0]).toFixed(2))
+      return { ...r, valor: String(val) }
+    }))
+  }
 
   const lastVal = lecturas[lecturas.length - 1]?.valor
   const avg     = lecturas.length ? (lecturas.reduce((s, l) => s + l.valor, 0) / lecturas.length).toFixed(1) : '—'
@@ -195,136 +266,221 @@ const handleSimular = async () => {
         </div>
       </div>
 
-      <div style={styles.sensorGrid}>
-        {SENSOR_OPTIONS.map(s => (
-          <button key={s.id} onClick={() => setSensorSel(s)} style={{
-            ...styles.sensorBtn,
-            borderColor: sensorSel.id === s.id ? s.color : 'rgba(34,197,94,0.1)',
-            background:  sensorSel.id === s.id ? `${s.color}15` : '#0d1510',
-            color:       sensorSel.id === s.id ? s.color : '#6b7280',
-          }}>
-            <div style={{ fontWeight: 700, fontSize: '12px' }}>{s.label}</div>
-            <div style={{ fontSize: '10px', fontFamily: 'monospace', opacity: 0.7 }}>{s.id}</div>
-          </button>
-        ))}
-      </div>
-
-      <div style={styles.statsRow}>
+      {/* Tabs */}
+      <div style={styles.tabsBar}>
         {[
-          { label: 'Ultimo valor', val: `${lastVal ?? '—'} ${sensorSel.unit}`, color: sensorSel.color },
-          { label: 'Promedio',     val: `${avg} ${sensorSel.unit}`,            color: '#60a5fa'       },
-          { label: 'Maximo',       val: `${max} ${sensorSel.unit}`,            color: '#f87171'       },
-          { label: 'Minimo',       val: `${min} ${sensorSel.unit}`,            color: '#22c55e'       },
-          { label: 'Lecturas',     val: lecturas.length,                        color: '#a78bfa'       },
-        ].map(s => (
-          <div key={s.label} style={styles.statCard}>
-            <div style={styles.statLabel}>{s.label}</div>
-            <div style={{ ...styles.statVal, color: s.color }}>{s.val}</div>
-          </div>
+          { id: 'lectura', label: 'Lectura individual' },
+          { id: 'lote',    label: 'Lote de lecturas'   },
+        ].map(t => (
+          <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
+            ...styles.tabBtn,
+            ...(activeTab === t.id ? styles.tabBtnActive : {})
+          }}>{t.label}</button>
         ))}
       </div>
 
-      <div className="card" style={{ marginBottom: '20px' }}>
-        <div style={styles.chartHeader}>
-          <div style={styles.chartTitle}>{sensorSel.label} — Ultimas {lecturas.length} lecturas</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: sensorSel.color }} />
-            <span style={{ fontSize: '12px', color: '#6b7280' }}>{sensorSel.metric}</span>
+      {/* ── TAB: Lectura individual ── */}
+      {activeTab === 'lectura' && (
+        <>
+          <div style={styles.sensorGrid}>
+            {SENSOR_OPTIONS.map(s => (
+              <button key={s.id} onClick={() => setSensorSel(s)} style={{
+                ...styles.sensorBtn,
+                borderColor: sensorSel.id === s.id ? s.color : 'rgba(34,197,94,0.1)',
+                background:  sensorSel.id === s.id ? `${s.color}15` : '#0d1510',
+                color:       sensorSel.id === s.id ? s.color : '#6b7280',
+              }}>
+                <div style={{ fontWeight: 700, fontSize: '12px' }}>{s.label}</div>
+                <div style={{ fontSize: '10px', fontFamily: 'monospace', opacity: 0.7 }}>{s.id}</div>
+              </button>
+            ))}
           </div>
-        </div>
-        {loading ? (
-          <div className="skeleton" style={{ height: '220px', borderRadius: '8px' }} />
-        ) : lecturas.length === 0 ? (
-          <div style={styles.noData}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="1.5" style={{ marginBottom: '8px' }}>
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-            </svg>
-            <div>Sin datos para {sensorSel.id}</div>
-            <div style={{ fontSize: '11px', marginTop: '4px', color: '#4b5563' }}>Usa el simulador o el boton de datos del Dashboard</div>
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={lecturas} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
-              <defs>
-                <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor={sensorSel.color} stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor={sensorSel.color} stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(34,197,94,0.06)" />
-              <XAxis dataKey="time" tick={{ fill: '#4b5563', fontSize: 10 }} tickLine={false} />
-              <YAxis tick={{ fill: '#4b5563', fontSize: 10 }} tickLine={false} axisLine={false} />
-              <Tooltip content={<CustomTooltip />} />
-              <Area type="monotone" dataKey="valor" stroke={sensorSel.color} strokeWidth={2} fill="url(#grad)" dot={{ fill: sensorSel.color, r: 3 }} />
-            </AreaChart>
-          </ResponsiveContainer>
-        )}
-      </div>
 
-      <div style={styles.bottomGrid}>
-        <div className="card" style={{ flex: 1 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-            <div style={styles.chartTitle}>Simular lectura</div>
-            <span style={styles.simBadge}>Modo prueba</span>
+          <div style={styles.statsRow}>
+            {[
+              { label: 'Ultimo valor', val: `${lastVal ?? '—'} ${sensorSel.unit}`, color: sensorSel.color },
+              { label: 'Promedio',     val: `${avg} ${sensorSel.unit}`,            color: '#60a5fa'       },
+              { label: 'Maximo',       val: `${max} ${sensorSel.unit}`,            color: '#f87171'       },
+              { label: 'Minimo',       val: `${min} ${sensorSel.unit}`,            color: '#22c55e'       },
+              { label: 'Lecturas',     val: lecturas.length,                        color: '#a78bfa'       },
+            ].map(s => (
+              <div key={s.label} style={styles.statCard}>
+                <div style={styles.statLabel}>{s.label}</div>
+                <div style={{ ...styles.statVal, color: s.color }}>{s.val}</div>
+              </div>
+            ))}
           </div>
-          <div style={styles.simInfo}>
-            <div style={styles.simInfoItem}>Sensor <span style={{ color: sensorSel.color }}>{sensorSel.id}</span></div>
-            <div style={styles.simInfoItem}>Metrica <span style={{ color: '#9ca3af' }}>{sensorSel.metric}</span></div>
-            <div style={styles.simInfoItem}>Rango <span style={{ color: '#9ca3af' }}>{sensorSel.min}–{sensorSel.max} {sensorSel.unit}</span></div>
-          </div>
-          <div style={styles.simForm}>
-            <input
-              type="number"
-              placeholder={`Valor (${sensorSel.min}–${sensorSel.max} ${sensorSel.unit})`}
-              value={simVal}
-              onChange={e => setSimVal(e.target.value)}
-              style={styles.simInput}
-              onKeyDown={e => e.key === 'Enter' && handleSimular()}
-            />
-            <button onClick={handleSimular} className="btn btn-primary">Enviar</button>
-          </div>
-          {simMsg && (
-            <div style={{ marginTop: '10px', fontSize: '13px', color: simMsg.includes('✅') ? '#22c55e' : simMsg.includes('⚠') ? '#fbbf24' : '#f87171' }}>
-              {simMsg}
-            </div>
-          )}
-        </div>
 
-        <div className="card" style={{ flex: 1 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-            <div style={styles.chartTitle}>Alertas de {sensorSel.id}</div>
-            <select value={filtroSev} onChange={e => setFiltroSev(e.target.value)} style={styles.sevSelect}>
-              <option value="todos">Todas</option>
-              <option value="critica">Critica</option>
-              <option value="alta">Alta</option>
-              <option value="media">Media</option>
-              <option value="baja">Baja</option>
-            </select>
-          </div>
-          {alertasFiltradas.length === 0 ? (
-            <div style={styles.noAlertas}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="1.5" style={{ marginBottom: '6px' }}>
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                <polyline points="22 4 12 14.01 9 11.01"/>
-              </svg>
-              <div style={{ fontSize: '13px', color: '#4b5563' }}>Sin alertas para este sensor</div>
+          <div className="card" style={{ marginBottom: '20px' }}>
+            <div style={styles.chartHeader}>
+              <div style={styles.chartTitle}>{sensorSel.label} — Ultimas {lecturas.length} lecturas</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: sensorSel.color }} />
+                <span style={{ fontSize: '12px', color: '#6b7280' }}>{sensorSel.metric}</span>
+              </div>
             </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
-              {alertasFiltradas.slice(0, 8).map(a => (
-                <div key={a.id} style={{ ...styles.alertItem, borderLeft: `3px solid ${SEV_COLOR[a.severidad] || '#6b7280'}` }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 700, color: SEV_COLOR[a.severidad] }}>{a.severidad?.toUpperCase()}</span>
-                    <span style={{ fontSize: '10px', color: '#4b5563' }}>{new Date(a.generada_en).toLocaleTimeString('es-CO')}</span>
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#d1fae5' }}>{a.condicion}</div>
-                  <div style={{ fontSize: '11px', color: '#6b7280' }}>Valor: {a.valor_detectado} · {a.tipo_alerta}</div>
+            {loading ? (
+              <div className="skeleton" style={{ height: '220px', borderRadius: '8px' }} />
+            ) : lecturas.length === 0 ? (
+              <div style={styles.noData}>
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="1.5" style={{ marginBottom: '8px' }}>
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                </svg>
+                <div>Sin datos para {sensorSel.id}</div>
+                <div style={{ fontSize: '11px', marginTop: '4px', color: '#4b5563' }}>Usa el simulador o el boton de datos del Dashboard</div>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <AreaChart data={lecturas} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
+                  <defs>
+                    <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor={sensorSel.color} stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor={sensorSel.color} stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(34,197,94,0.06)" />
+                  <XAxis dataKey="time" tick={{ fill: '#4b5563', fontSize: 10 }} tickLine={false} />
+                  <YAxis tick={{ fill: '#4b5563', fontSize: 10 }} tickLine={false} axisLine={false} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Area type="monotone" dataKey="valor" stroke={sensorSel.color} strokeWidth={2} fill="url(#grad)" dot={{ fill: sensorSel.color, r: 3 }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          <div style={styles.bottomGrid}>
+            <div className="card" style={{ flex: 1 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                <div style={styles.chartTitle}>Simular lectura</div>
+                <span style={styles.simBadge}>Modo prueba</span>
+              </div>
+              <div style={styles.simInfo}>
+                <div style={styles.simInfoItem}>Sensor <span style={{ color: sensorSel.color }}>{sensorSel.id}</span></div>
+                <div style={styles.simInfoItem}>Metrica <span style={{ color: '#9ca3af' }}>{sensorSel.metric}</span></div>
+                <div style={styles.simInfoItem}>Rango <span style={{ color: '#9ca3af' }}>{sensorSel.min}–{sensorSel.max} {sensorSel.unit}</span></div>
+              </div>
+              <div style={styles.simForm}>
+                <input
+                  type="number"
+                  placeholder={`Valor (${sensorSel.min}–${sensorSel.max} ${sensorSel.unit})`}
+                  value={simVal}
+                  onChange={e => setSimVal(e.target.value)}
+                  style={styles.simInput}
+                  onKeyDown={e => e.key === 'Enter' && handleSimular()}
+                />
+                <button onClick={handleSimular} className="btn btn-primary">Enviar</button>
+              </div>
+              {simMsg && (
+                <div style={{ marginTop: '10px', fontSize: '13px', color: simMsg.includes('✅') ? '#22c55e' : simMsg.includes('⚠') ? '#fbbf24' : '#f87171' }}>
+                  {simMsg}
                 </div>
+              )}
+            </div>
+
+            <div className="card" style={{ flex: 1 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                <div style={styles.chartTitle}>Alertas de {sensorSel.id}</div>
+                <select value={filtroSev} onChange={e => setFiltroSev(e.target.value)} style={styles.sevSelect}>
+                  <option value="todos">Todas</option>
+                  <option value="critica">Critica</option>
+                  <option value="alta">Alta</option>
+                  <option value="media">Media</option>
+                  <option value="baja">Baja</option>
+                </select>
+              </div>
+              {alertasFiltradas.length === 0 ? (
+                <div style={styles.noAlertas}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="1.5" style={{ marginBottom: '6px' }}>
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                  </svg>
+                  <div style={{ fontSize: '13px', color: '#4b5563' }}>Sin alertas para este sensor</div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
+                  {alertasFiltradas.slice(0, 8).map(a => (
+                    <div key={a.id} style={{ ...styles.alertItem, borderLeft: `3px solid ${SEV_COLOR[a.severidad] || '#6b7280'}` }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: SEV_COLOR[a.severidad] }}>{a.severidad?.toUpperCase()}</span>
+                        <span style={{ fontSize: '10px', color: '#4b5563' }}>{new Date(a.generada_en).toLocaleTimeString('es-CO')}</span>
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#d1fae5' }}>{a.condicion}</div>
+                      <div style={{ fontSize: '11px', color: '#6b7280' }}>Valor: {a.valor_detectado} · {a.tipo_alerta}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── TAB: Lote de lecturas ── */}
+      {activeTab === 'lote' && (
+        <div className="animate-fade">
+          <div className="card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '18px' }}>
+              <div>
+                <div style={styles.chartTitle}>Lote de lecturas multiples</div>
+                <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+                  Ingresa valores para varios sensores y envialos todos de una vez. Deja en blanco los que no quieras enviar.
+                </div>
+              </div>
+              <button onClick={generarLoteAleatorio} style={styles.genBtn}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+                Generar aleatorio
+              </button>
+            </div>
+
+            {/* Tabla de lote */}
+            <div style={styles.loteGrid}>
+              <div style={styles.loteHeader}>Sensor</div>
+              <div style={styles.loteHeader}>Metrica</div>
+              <div style={styles.loteHeader}>Valor</div>
+              <div style={styles.loteHeader}>Unidad</div>
+
+              {loteRows.map((row, i) => (
+                <>
+                  <div key={`id-${i}`} style={styles.loteCell}>
+                    <span style={{ fontFamily: 'monospace', color: '#4ade80', fontSize: '12px' }}>{row.id_logico}</span>
+                  </div>
+                  <div key={`metric-${i}`} style={styles.loteCell}>
+                    <span style={{ fontSize: '12px', color: '#9ca3af' }}>{row.tipo_metrica}</span>
+                  </div>
+                  <div key={`val-${i}`} style={styles.loteCellInput}>
+                    <input
+                      type="number"
+                      placeholder="—"
+                      value={row.valor}
+                      onChange={e => setLoteRows(prev => prev.map((r, idx) => idx === i ? { ...r, valor: e.target.value } : r))}
+                      style={styles.loteInput}
+                    />
+                  </div>
+                  <div key={`unit-${i}`} style={styles.loteCell}>
+                    <span style={{ fontSize: '12px', color: '#6b7280' }}>{row.unidad}</span>
+                  </div>
+                </>
               ))}
             </div>
-          )}
+
+            <div style={{ marginTop: '18px', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <button onClick={handleEnviarLote} disabled={loteLoading} className="btn btn-primary">
+                {loteLoading ? 'Enviando...' : `Enviar ${loteRows.filter(r => r.valor !== '').length} lecturas`}
+              </button>
+              <button onClick={() => setLoteRows(prev => prev.map(r => ({ ...r, valor: '' })))} className="btn btn-ghost" style={{ fontSize: '12px' }}>
+                Limpiar
+              </button>
+              {loteMsg && (
+                <span style={{ fontSize: '13px', color: loteMsg.startsWith('✅') ? '#22c55e' : '#f87171' }}>
+                  {loteMsg}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       <style>{`
         @keyframes pulse-green {
@@ -343,6 +499,9 @@ const styles = {
   subtitle: { fontSize: '13px', color: '#6b7280', marginTop: '4px' },
   headerRight: { display: 'flex', gap: '10px', alignItems: 'center' },
   autoBtn: { display: 'flex', alignItems: 'center', gap: '7px', padding: '8px 14px', borderRadius: '20px', border: '1px solid', fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", transition: 'all 0.2s' },
+  tabsBar: { display: 'flex', gap: '4px', marginBottom: '20px', background: '#0d1510', borderRadius: '10px', padding: '4px', border: '1px solid rgba(34,197,94,0.1)' },
+  tabBtn: { flex: 1, padding: '9px', borderRadius: '7px', border: 'none', background: 'transparent', color: '#6b7280', fontSize: '13px', fontWeight: 500, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", transition: 'all 0.15s' },
+  tabBtnActive: { background: 'rgba(34,197,94,0.15)', color: '#22c55e' },
   sensorGrid: { display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '8px', marginBottom: '20px' },
   sensorBtn: { padding: '10px 8px', borderRadius: '10px', border: '1px solid', background: '#0d1510', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", transition: 'all 0.15s', textAlign: 'center' },
   statsRow: { display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginBottom: '20px' },
@@ -361,4 +520,10 @@ const styles = {
   sevSelect: { padding: '5px 10px', background: '#0d1510', border: '1px solid rgba(34,197,94,0.15)', borderRadius: '8px', color: '#9ca3af', fontSize: '12px', cursor: 'pointer' },
   noAlertas: { textAlign: 'center', padding: '30px', color: '#4b5563', display: 'flex', flexDirection: 'column', alignItems: 'center' },
   alertItem: { background: 'rgba(6,12,7,0.6)', borderRadius: '6px', padding: '8px 10px' },
+  genBtn: { display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', border: '1px solid rgba(34,197,94,0.2)', background: 'rgba(34,197,94,0.08)', color: '#4ade80', fontSize: '12px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' },
+  loteGrid: { display: 'grid', gridTemplateColumns: '180px 1fr 150px 80px', gap: '8px', alignItems: 'center' },
+  loteHeader: { fontSize: '10px', color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.7px', padding: '6px 10px', fontWeight: 600 },
+  loteCell: { padding: '8px 12px', background: 'rgba(6,12,7,0.5)', borderRadius: '7px', minHeight: '38px', display: 'flex', alignItems: 'center', border: '1px solid rgba(34,197,94,0.06)' },
+  loteCellInput: { minHeight: '38px', display: 'flex', alignItems: 'center' },
+  loteInput: { width: '100%', padding: '8px 12px', background: 'rgba(6,12,7,0.8)', border: '1px solid rgba(34,197,94,0.15)', borderRadius: '7px', color: '#f0fdf4', fontSize: '13px', fontFamily: "'DM Sans', sans-serif" },
 }
