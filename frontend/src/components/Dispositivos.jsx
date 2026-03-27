@@ -10,13 +10,20 @@ const CAT_STYLES = {
   infra:     { color: '#c084fc', bg: 'rgba(192,132,252,0.12)',border: 'rgba(192,132,252,0.3)' },
 }
 
-// Prefijos de ID logico por tipo de sensor
 const ID_PREFIJOS = {
-  1:  'SOIL_HUM',  2: 'SOIL_PH',   3: 'SOIL_EC',  4:  'SOIL_TEMP',
-  5:  'AIR_TEMP',  6: 'AIR_HUM',   7: 'LUX',      8:  'WIND',
-  9:  'RAIN',      10: 'WAT_PH',   11: 'WAT_FLOW', 12: 'VALVE',
-  13: 'PUMP',      14: 'MCU',      15: 'ETH',      16: 'BATT',
+  1:  'SOIL_HUM',  2:  'SOIL_PH',   3:  'SOIL_EC',   4:  'SOIL_TEMP',
+  5:  'AIR_TEMP',  6:  'AIR_HUM',   7:  'LUX',        8:  'WIND',
+  9:  'RAIN',      10: 'WAT_PH',    11: 'WAT_FLOW',   12: 'VALVE',
+  13: 'PUMP',      14: 'MCU',       15: 'ETH',         16: 'BATT',
   17: 'SOLAR',
+}
+
+const TIPO_SERIAL_ABBREV = {
+  1:  'HUM-CAP', 2:  'PHS-450', 3:  'ECS-100', 4:  'TMP-S10',
+  5:  'TMP-A20', 6:  'HUM-AIR', 7:  'LUX-300', 8:  'WND-200',
+  9:  'RAN-100', 10: 'PHS-WAT', 11: 'FLW-100', 12: 'VLV-100',
+  13: 'PMP-100', 14: 'MCU-ESP', 15: 'ETH-W5K', 16: 'BAT-LPO',
+  17: 'SOL-PNL',
 }
 
 const TIPO_OPCIONES = [
@@ -39,7 +46,6 @@ const TIPO_OPCIONES = [
   { id:17, nombre:'Panel Solar',              categoria:'infra'     },
 ]
 
-// Genera el siguiente ID logico basado en los existentes
 function generarIdLogico(tipoId, dispositivos) {
   const prefijo = ID_PREFIJOS[tipoId]
   if (!prefijo) return ''
@@ -53,23 +59,20 @@ function generarIdLogico(tipoId, dispositivos) {
   return `${prefijo}_${String(siguiente).padStart(2, '0')}`
 }
 
-// Genera serial unico
-function generarSerial(dispositivos) {
-  const year = new Date().getFullYear()
+function generarSerial(tipoId, dispositivos) {
+  const abbrev = TIPO_SERIAL_ABBREV[tipoId] || 'SEN-GEN'
   const existentes = dispositivos
-    .map(d => d.numero_serial)
-    .filter(s => s?.startsWith(`SN-${year}`))
-    .map(s => {
-      const match = s.match(/\d{4}$/)
-      return match ? parseInt(match[0]) : 0
+    .filter(d => d.numero_serial?.startsWith(`SN-${abbrev}-`))
+    .map(d => {
+      const match = d.numero_serial.match(/(\d{3})$/)
+      return match ? parseInt(match[1]) : 0
     })
   const siguiente = existentes.length > 0 ? Math.max(...existentes) + 1 : 1
-  return `SN-${year}${String(siguiente).padStart(4, '0')}`
+  return `SN-${abbrev}-${String(siguiente).padStart(3, '0')}`
 }
 
-// Regex de validacion
 const REGEX_ID_LOGICO = /^[A-Z][A-Z0-9_]{2,19}(_\d{2,3})?$/
-const REGEX_SERIAL    = /^SN-\d{8}$/
+const REGEX_SERIAL    = /^SN-[A-Z0-9]{2,5}-[A-Z0-9]{2,5}-\d{3}$/
 
 function validarCampos(form) {
   const errores = {}
@@ -77,7 +80,7 @@ function validarCampos(form) {
     errores.id_logico = 'Formato invalido. Ej: SOIL_HUM_02 — solo mayusculas, numeros y guion bajo'
   }
   if (!REGEX_SERIAL.test(form.numero_serial)) {
-    errores.numero_serial = 'Formato invalido. Debe ser SN-AAAANNNN ej: SN-20260018'
+    errores.numero_serial = 'Formato invalido. Debe ser SN-ABC-XYZ-001 ej: SN-HUM-CAP-002'
   }
   return errores
 }
@@ -120,27 +123,26 @@ export default function Dispositivos() {
 
   useEffect(() => { load() }, [])
 
-  // Auto-generar ID y serial al abrir el formulario
   useEffect(() => {
     if (showForm && dispositivos.length >= 0) {
       setForm(prev => ({
         ...prev,
-        id_logico:      generarIdLogico(prev.tipo_dispositivo_id, dispositivos),
-        numero_serial:  generarSerial(dispositivos),
+        id_logico:     generarIdLogico(prev.tipo_dispositivo_id, dispositivos),
+        numero_serial: generarSerial(prev.tipo_dispositivo_id, dispositivos),
       }))
       setFormErrores({})
       setFormMsg('')
     }
   }, [showForm])
 
-  // Auto-generar ID logico cuando cambia el tipo
   const handleTipoChange = (tipoId) => {
-    const nuevoId = generarIdLogico(parseInt(tipoId), dispositivos)
-    setForm(prev => ({ ...prev, tipo_dispositivo_id: parseInt(tipoId), id_logico: nuevoId }))
-    setFormErrores(prev => ({ ...prev, id_logico: '' }))
+    const id          = parseInt(tipoId)
+    const nuevoId     = generarIdLogico(id, dispositivos)
+    const nuevoSerial = generarSerial(id, dispositivos)
+    setForm(prev => ({ ...prev, tipo_dispositivo_id: id, id_logico: nuevoId, numero_serial: nuevoSerial }))
+    setFormErrores(prev => ({ ...prev, id_logico: '', numero_serial: '' }))
   }
 
-  // Validar campo al perder foco
   const handleBlur = (campo) => {
     const errores = validarCampos(form)
     setFormErrores(prev => ({ ...prev, [campo]: errores[campo] || '' }))
@@ -170,7 +172,6 @@ export default function Dispositivos() {
 
   const handleRegistrar = async (e) => {
     e.preventDefault()
-    // Validar todos los campos
     const errores = validarCampos(form)
     if (Object.keys(errores).length > 0) {
       setFormErrores(errores)
@@ -231,10 +232,12 @@ export default function Dispositivos() {
       {showForm && (
         <div style={styles.formCard} className="animate-fade">
           <div style={styles.formTitle}>Registrar nuevo sensor</div>
-          <p style={styles.formDesc}>El ID logico y serial se generan automaticamente segun el tipo seleccionado. Puedes editarlos manualmente respetando el formato.</p>
-
+          <p style={styles.formDesc}>
+            El ID logico y serial se generan automaticamente segun el tipo seleccionado.
+            Puedes editarlos manualmente respetando el formato indicado.
+          </p>
           <form onSubmit={handleRegistrar} style={styles.formGrid}>
-            {/* Tipo */}
+
             <div style={styles.fieldGroup}>
               <label style={styles.label}>Tipo de sensor</label>
               <select
@@ -248,7 +251,6 @@ export default function Dispositivos() {
               </select>
             </div>
 
-            {/* ID Logico */}
             <div style={styles.fieldGroup}>
               <label style={styles.label}>
                 ID Logico *
@@ -258,55 +260,50 @@ export default function Dispositivos() {
                 placeholder="ej: SOIL_HUM_02"
                 value={form.id_logico}
                 onChange={e => {
-                  setForm(p => ({...p, id_logico: e.target.value.toUpperCase()}))
-                  setFormErrores(p => ({...p, id_logico: ''}))
+                  setForm(p => ({ ...p, id_logico: e.target.value.toUpperCase() }))
+                  setFormErrores(p => ({ ...p, id_logico: '' }))
                 }}
                 onBlur={() => handleBlur('id_logico')}
                 style={{ ...styles.input, borderColor: formErrores.id_logico ? '#f87171' : 'rgba(34,197,94,0.15)' }}
               />
               {formErrores.id_logico && <div style={styles.errorMsg}>{formErrores.id_logico}</div>}
-              <div style={styles.ejemplos}>
-                Ejemplos validos: SOIL_HUM_02 · AIR_TEMP_03 · LUX_02 · BATT_02
-              </div>
+              <div style={styles.ejemplos}>Ej: SOIL_HUM_02 · AIR_TEMP_03 · LUX_02 · BATT_02</div>
             </div>
 
-            {/* Serial */}
             <div style={styles.fieldGroup}>
               <label style={styles.label}>
                 Numero Serial *
-                <span style={styles.formatHint}> formato: SN-AAAANNNN</span>
+                <span style={styles.formatHint}> formato: SN-ABC-XYZ-001</span>
               </label>
               <input
-                placeholder="ej: SN-20260018"
+                placeholder="ej: SN-HUM-CAP-002"
                 value={form.numero_serial}
                 onChange={e => {
-                  setForm(p => ({...p, numero_serial: e.target.value.toUpperCase()}))
-                  setFormErrores(p => ({...p, numero_serial: ''}))
+                  setForm(p => ({ ...p, numero_serial: e.target.value.toUpperCase() }))
+                  setFormErrores(p => ({ ...p, numero_serial: '' }))
                 }}
                 onBlur={() => handleBlur('numero_serial')}
                 style={{ ...styles.input, borderColor: formErrores.numero_serial ? '#f87171' : 'rgba(34,197,94,0.15)' }}
               />
               {formErrores.numero_serial && <div style={styles.errorMsg}>{formErrores.numero_serial}</div>}
-              <div style={styles.ejemplos}>Formato: SN-20260018</div>
+              <div style={styles.ejemplos}>Ej: SN-HUM-CAP-002 · SN-TMP-A20-003 · SN-BAT-LPO-002</div>
             </div>
 
-            {/* Firmware */}
             <div style={styles.fieldGroup}>
               <label style={styles.label}>Firmware</label>
               <input
                 placeholder="1.0.0"
                 value={form.version_firmware}
-                onChange={e => setForm(p => ({...p, version_firmware: e.target.value}))}
+                onChange={e => setForm(p => ({ ...p, version_firmware: e.target.value }))}
                 style={styles.input}
               />
             </div>
 
-            {/* Estado */}
             <div style={styles.fieldGroup}>
               <label style={styles.label}>Estado inicial</label>
               <select
                 value={form.estado}
-                onChange={e => setForm(p => ({...p, estado: e.target.value}))}
+                onChange={e => setForm(p => ({ ...p, estado: e.target.value }))}
                 style={styles.input}
               >
                 <option value="activo">Activo</option>
@@ -315,14 +312,12 @@ export default function Dispositivos() {
               </select>
             </div>
 
-            {/* Submit */}
             <div style={{ display: 'flex', alignItems: 'flex-end' }}>
               <button type="submit" disabled={formLoading} style={styles.submitBtn}>
                 {formLoading ? 'Registrando...' : 'Registrar sensor'}
               </button>
             </div>
           </form>
-
           {formMsg && (
             <div style={{ marginTop: '12px', fontSize: '13px', color: formMsg.startsWith('✅') ? '#22c55e' : '#f87171' }}>
               {formMsg}
@@ -505,7 +500,7 @@ const styles = {
   addBtn: { display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 16px', borderRadius: '10px', border: '1px solid', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", transition: 'all 0.2s' },
   formCard: { background: '#0d1510', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '16px', padding: '22px 24px', marginBottom: '20px' },
   formTitle: { fontFamily: "'Syne', sans-serif", fontSize: '14px', fontWeight: 600, color: '#f0fdf4', marginBottom: '6px' },
-  formDesc: { fontSize: '12px', color: '#6b7280', marginBottom: '18px', lineHeight: 1.5 },
+  formDesc: { fontSize: '12px', color: '#6b7280', marginBottom: '18px', lineHeight: 1.6 },
   formGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' },
   fieldGroup: { display: 'flex', flexDirection: 'column', gap: '5px' },
   label: { fontSize: '11px', fontWeight: 500, color: '#86efac', letterSpacing: '0.4px' },
