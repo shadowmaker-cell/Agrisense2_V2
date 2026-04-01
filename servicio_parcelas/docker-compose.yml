@@ -1,0 +1,37 @@
+version: "3.9"
+
+services:
+
+  parcelas-service:
+    build: .
+    ports:
+      - "8005:8005"
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql://postgres:1234@postgres:5432/parcelas_db
+      DEVICE_SERVICE_URL: http://servicio-dispositivos:8001
+      JWT_SECRET: local-secret-dev
+      REFRESH_SECRET: local-refresh-dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "1234"
+      POSTGRES_DB: parcelas_db
+    ports:
+      - "5436:5432"
+    volumes:
+      - postgres_parcelas_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_parcelas_data:
