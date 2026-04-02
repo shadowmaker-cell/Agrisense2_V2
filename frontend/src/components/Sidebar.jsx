@@ -29,6 +29,12 @@ const navItems = [
       <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
     </svg>
   )},
+  { id: 'parcelas', label: 'Parcelas', icon: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+      <polyline points="9 22 9 12 15 12 15 22"/>
+    </svg>
+  )},
 ]
 
 export default function Sidebar({ active, setActive }) {
@@ -70,7 +76,7 @@ export default function Sidebar({ active, setActive }) {
 
       <div style={styles.statusCard}>
         <div style={styles.statusTitle}>Estado del sistema</div>
-        {['Dispositivos', 'Ingesta', 'Procesamiento', 'Notificaciones'].map(s => (
+        {['Dispositivos', 'Ingesta', 'Procesamiento', 'Notificaciones', 'Parcelas'].map(s => (
           <div key={s} style={styles.statusRow}>
             <div style={{ ...styles.statusDot, animation: 'pulse-green 2s infinite' }} />
             <span style={styles.statusLabel}>{s}</span>
@@ -99,6 +105,10 @@ export default function Sidebar({ active, setActive }) {
           0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
           50%       { box-shadow: 0 0 0 5px rgba(34,197,94,0); }
         }
+        @keyframes slideIn {
+          from { opacity: 0; transform: translateX(-20px); }
+          to   { opacity: 1; transform: none; }
+        }
       `}</style>
     </aside>
   )
@@ -121,7 +131,7 @@ const styles = {
   logoText: { fontFamily: "'Syne', sans-serif", fontSize: '16px', fontWeight: 700, color: '#f0fdf4' },
   logoSub: { fontSize: '10px', color: '#4ade80' },
   divider: { height: '1px', background: 'rgba(34,197,94,0.08)', margin: '0 0 12px' },
-  nav: { display: 'flex', flexDirection: 'column', gap: '2px', padding: '0 10px', flex: 1 },
+  nav: { display: 'flex', flexDirection: 'column', gap: '2px', padding: '0 10px', flex: 1, overflowY: 'auto' },
   navItem: {
     display: 'flex', alignItems: 'center', gap: '10px',
     padding: '10px 12px', borderRadius: '8px', border: 'none',

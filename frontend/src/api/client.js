@@ -53,4 +53,21 @@ export const notificacionesAPI = {
   guardarPrefs:  (userId, data) => api.post(`/notificaciones/api/v1/notificaciones/preferencias/${userId}`, data),
 }
 
+export const parcelasAPI = {
+  health:          () => api.get('/parcelas/health'),
+  listar:          (estado) => api.get(`/parcelas/api/v1/parcelas/${estado ? `?estado=${estado}` : ''}`),
+  obtener:         (id) => api.get(`/parcelas/api/v1/parcelas/${id}`),
+  crear:           (data) => api.post('/parcelas/api/v1/parcelas/', data),
+  actualizar:      (id, data) => api.put(`/parcelas/api/v1/parcelas/${id}`, data),
+  eliminar:        (id) => api.delete(`/parcelas/api/v1/parcelas/${id}`),
+  resumen:         () => api.get('/parcelas/api/v1/parcelas/resumen'),
+  tiposCultivo:    () => api.get('/parcelas/api/v1/parcelas/tipos-cultivo'),
+  asignarSensor:   (id, data) => api.post(`/parcelas/api/v1/parcelas/${id}/sensores`, data),
+  sensores:        (id) => api.get(`/parcelas/api/v1/parcelas/${id}/sensores`),
+  desasignarSensor:(id, sensorId) => api.delete(`/parcelas/api/v1/parcelas/${id}/sensores/${sensorId}`),
+  historial:       (id) => api.get(`/parcelas/api/v1/parcelas/${id}/historial`),
+  agregarHistorial:(id, data) => api.post(`/parcelas/api/v1/parcelas/${id}/historial`, data),
+  actualizarHistorial: (id, histId, data) => api.put(`/parcelas/api/v1/parcelas/${id}/historial/${histId}`, data),
+}
+
 export default api

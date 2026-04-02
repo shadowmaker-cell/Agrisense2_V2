@@ -7,6 +7,7 @@ import Dispositivos from './components/Dispositivos'
 import Alertas from './components/Alertas'
 import Notificaciones from './components/Notificaciones'
 import Lecturas from './components/Lecturas'
+import Parcelas from './components/Parcelas'
 
 export default function App() {
   const { user } = useAuth()
@@ -20,6 +21,7 @@ export default function App() {
     lecturas:       <Lecturas />,
     alertas:        <Alertas />,
     notificaciones: <Notificaciones />,
+    parcelas:       <Parcelas />,
   }
 
   return (
