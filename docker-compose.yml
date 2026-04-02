@@ -14,6 +14,7 @@ services:
       - servicio-procesamiento
       - servicio-notificaciones
       - servicio-parcelas
+      - servicio-ml
     restart: on-failure
 
   servicio-dispositivos:
@@ -105,6 +106,23 @@ services:
         condition: service_healthy
     restart: on-failure
 
+  servicio-ml:
+    build: ./servicio_ml
+    expose:
+      - "8006"
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql://postgres:1234@postgres-ml:5432/ml_db
+      DEVICE_SERVICE_URL: http://servicio-dispositivos:8001
+      INGESTA_SERVICE_URL: http://servicio-ingesta:8002
+      PARCELAS_SERVICE_URL: http://servicio-parcelas:8005
+      JWT_SECRET: ${JWT_SECRET}
+      REFRESH_SECRET: ${REFRESH_SECRET}
+    depends_on:
+      postgres-ml:
+        condition: service_healthy
+    restart: on-failure
+
   postgres-dispositivos:
     image: postgres:16-alpine
     environment:
@@ -175,6 +193,20 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres-ml:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "1234"
+      POSTGRES_DB: ml_db
+    volumes:
+      - postgres_ml_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
     environment:
@@ -195,3 +227,4 @@ volumes:
   postgres_procesamiento_data:
   postgres_notificaciones_data:
   postgres_parcelas_data:
+  postgres_ml_data:
