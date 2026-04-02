@@ -10,23 +10,77 @@ const ESTADO_COLOR = {
 const ETAPAS      = ['germinacion','vegetativo','floracion','fructificacion','maduracion','cosecha']
 const TIPOS_SUELO = ['arcilloso','arenoso','limoso','franco','otro']
 
-const cardStyle = {
-  background: 'rgba(6,12,7,0.6)',
-  borderRadius: '8px',
-  padding: '10px 12px',
-}
+const cardStyle     = { background: 'rgba(6,12,7,0.6)', borderRadius: '8px', padding: '10px 12px' }
+const cardFullStyle = { background: 'rgba(6,12,7,0.6)', borderRadius: '8px', padding: '10px 12px', gridColumn: '1 / -1' }
 
-const cardFullStyle = {
-  background: 'rgba(6,12,7,0.6)',
-  borderRadius: '8px',
-  padding: '10px 12px',
-  gridColumn: '1 / -1',
+function MapaParcelas({ parcelas, onSelect, styles }) {
+  const conCoords = parcelas.filter(p => p.latitud && p.longitud)
+
+  if (conCoords.length === 0) {
+    return (
+      <div style={styles.mapaCard}>
+        <div style={styles.mapaHeader}>
+          <div style={styles.chartTitle}>Mapa de parcelas</div>
+          <span style={styles.mapaBadge}>0 ubicaciones</span>
+        </div>
+        <div style={styles.mapaEmpty}>
+          Agrega coordenadas GPS a las parcelas para verlas en el mapa
+        </div>
+      </div>
+    )
+  }
+
+  const lat = conCoords[0].latitud
+  const lon = conCoords[0].longitud
+
+  return (
+    <div style={styles.mapaCard}>
+      <div style={styles.mapaHeader}>
+        <div style={styles.chartTitle}>Mapa de parcelas</div>
+        <span style={styles.mapaBadge}>{conCoords.length} ubicaciones</span>
+      </div>
+      <div style={{ position: 'relative', borderRadius: '10px', overflow: 'hidden', height: '320px' }}>
+        <iframe
+          title="mapa-parcelas"
+          src={
+            'https://www.openstreetmap.org/export/embed.html?bbox=' +
+            (lon - 0.05) + '%2C' + (lat - 0.05) + '%2C' +
+            (lon + 0.05) + '%2C' + (lat + 0.05) +
+            '&layer=mapnik&marker=' + lat + '%2C' + lon
+          }
+          style={{ width: '100%', height: '320px', border: 'none', borderRadius: '10px' }}
+          loading="lazy"
+        />
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0,
+          background: 'rgba(13,21,16,0.92)', padding: '10px 14px',
+          display: 'flex', gap: '8px', flexWrap: 'wrap',
+        }}>
+          {conCoords.map(p => {
+            const est = ESTADO_COLOR[p.estado] || ESTADO_COLOR.inactiva
+            return (
+              <button key={p.id} onClick={() => onSelect(p)} style={{
+                padding: '4px 12px', borderRadius: '6px',
+                border: '1px solid ' + est.border,
+                background: est.bg, color: est.color,
+                fontSize: '11px', fontWeight: 600,
+                cursor: 'pointer', fontFamily: "'DM Sans', sans-serif",
+              }}>
+                {p.nombre}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function InfoTab({ selected, styles }) {
   const est = ESTADO_COLOR[selected.estado] || ESTADO_COLOR.inactiva
-  const mapsUrl = 'https://www.google.com/maps?q=' + selected.latitud + ',' + selected.longitud
-
+  const mapsUrl = selected.latitud && selected.longitud
+    ? 'https://www.google.com/maps?q=' + selected.latitud + ',' + selected.longitud
+    : null
   return (
     <div style={styles.infoGrid}>
       <div style={cardStyle}>
@@ -63,7 +117,7 @@ function InfoTab({ selected, styles }) {
       </div>
       <div style={cardFullStyle}>
         <div style={styles.infoLabel}>Coordenadas GPS</div>
-        {selected.latitud && selected.longitud ? (
+        {mapsUrl ? (
           <div>
             <div style={{ fontFamily: 'monospace', color: '#4ade80', fontSize: '12px', marginTop: '4px' }}>
               {selected.latitud}, {selected.longitud}
@@ -107,19 +161,18 @@ function SensoresTab({ selected, sensoresDisp, sensorForm, setSensorForm, sensor
         />
         <button type="submit" style={styles.submitBtn}>Asignar</button>
         {sensorMsg ? (
-          <div style={{ fontSize: '12px', color: sensorMsg.includes('Error') ? '#f87171' : '#22c55e' }}>
+          <div style={{ fontSize: '12px', color: sensorMsg.includes('Error') || sensorMsg.includes('ya esta') ? '#f87171' : '#22c55e' }}>
             {sensorMsg}
           </div>
         ) : null}
       </form>
-
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {selected.sensores?.filter(s => s.activo).length === 0 ? (
+        {selected.sensores && selected.sensores.filter(s => s.activo).length === 0 ? (
           <div style={{ textAlign: 'center', padding: '20px', color: '#4b5563', fontSize: '13px' }}>
             Sin sensores asignados
           </div>
         ) : (
-          selected.sensores?.filter(s => s.activo).map(s => (
+          selected.sensores && selected.sensores.filter(s => s.activo).map(s => (
             <div key={s.id} style={styles.sensorItem}>
               <div>
                 <div style={{ fontFamily: 'monospace', color: '#4ade80', fontSize: '12px' }}>{s.id_logico}</div>
@@ -127,7 +180,7 @@ function SensoresTab({ selected, sensoresDisp, sensorForm, setSensorForm, sensor
                   <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>{s.notas}</div>
                 ) : null}
                 <div style={{ fontSize: '10px', color: '#4b5563', marginTop: '2px' }}>
-                  Instalado: {new Date(s.fecha_instalacion).toLocaleDateString('es-CO')}
+                  {'Instalado: ' + new Date(s.fecha_instalacion).toLocaleDateString('es-CO')}
                 </div>
               </div>
               <button onClick={() => handleDesasignar(s.id)} style={styles.desasignarBtn}>
@@ -183,41 +236,35 @@ function HistorialTab({ selected, tipos, histForm, setHistForm, histMsg, handleA
           </div>
         ) : null}
       </form>
-
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {selected.historial?.length === 0 ? (
+        {selected.historial && selected.historial.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '20px', color: '#4b5563', fontSize: '13px' }}>
             Sin historial de cultivos
           </div>
         ) : (
-          selected.historial?.map(h => {
-            const borderColor = h.estado === 'activo' ? '#22c55e' : h.estado === 'perdido' ? '#f87171' : '#6b7280'
-            const textColor   = h.estado === 'activo' ? '#22c55e' : h.estado === 'perdido' ? '#f87171' : '#6b7280'
+          selected.historial && selected.historial.map(h => {
+            const bc = h.estado === 'activo' ? '#22c55e' : h.estado === 'perdido' ? '#f87171' : '#6b7280'
             return (
               <div key={h.id} style={{
-                padding: '10px 12px',
-                background: 'rgba(6,12,7,0.6)',
-                borderRadius: '8px',
-                border: '1px solid rgba(34,197,94,0.06)',
-                borderLeft: '3px solid ' + borderColor,
+                padding: '10px 12px', background: 'rgba(6,12,7,0.6)',
+                borderRadius: '8px', border: '1px solid rgba(34,197,94,0.06)',
+                borderLeft: '3px solid ' + bc,
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                   <span style={{ fontSize: '13px', fontWeight: 600, color: '#f0fdf4' }}>
                     {h.tipo_cultivo_nombre || 'Cultivo #' + h.tipo_cultivo_id}
                   </span>
-                  <span style={{ fontSize: '10px', fontWeight: 600, color: textColor }}>
+                  <span style={{ fontSize: '10px', fontWeight: 600, color: bc }}>
                     {h.estado.toUpperCase()}
                   </span>
                 </div>
                 <div style={{ fontSize: '11px', color: '#6b7280' }}>
                   {'Siembra: ' + new Date(h.fecha_siembra).toLocaleDateString('es-CO')}
-                  {h.etapa_fenologica ? ' - Etapa: ' + h.etapa_fenologica : ''}
-                  {h.rendimiento_kg ? ' - ' + h.rendimiento_kg + ' kg' : ''}
+                  {h.etapa_fenologica ? ' · Etapa: ' + h.etapa_fenologica : ''}
+                  {h.rendimiento_kg ? ' · ' + h.rendimiento_kg + ' kg' : ''}
                 </div>
                 {h.observaciones ? (
-                  <div style={{ fontSize: '11px', color: '#4b5563', marginTop: '3px' }}>
-                    {h.observaciones}
-                  </div>
+                  <div style={{ fontSize: '11px', color: '#4b5563', marginTop: '3px' }}>{h.observaciones}</div>
                 ) : null}
               </div>
             )
@@ -360,6 +407,12 @@ export default function Parcelas() {
         </button>
       </div>
 
+      <MapaParcelas
+        parcelas={parcelas}
+        onSelect={p => { setSelected(p); setActiveTab('info') }}
+        styles={styles}
+      />
+
       {showForm ? (
         <div style={styles.formCard} className="animate-fade">
           <div style={styles.formTitle}>Registrar nueva parcela</div>
@@ -467,20 +520,16 @@ export default function Parcelas() {
               <div style={styles.emptySub}>Crea tu primera parcela con el boton de arriba</div>
             </div>
           ) : (
-            filtered.map((p) => {
+            filtered.map(p => {
               const est = ESTADO_COLOR[p.estado] || ESTADO_COLOR.inactiva
               const sensoresActivos = p.sensores ? p.sensores.filter(s => s.activo).length : 0
               const cultivoActivo   = p.historial ? p.historial.find(h => h.estado === 'activo') : null
               const isSelected      = selected && selected.id === p.id
               return (
                 <div key={p.id} onClick={() => { setSelected(p); setActiveTab('info') }} style={{
-                  padding: '16px 18px',
-                  borderRadius: '14px',
+                  padding: '16px 18px', borderRadius: '14px', cursor: 'pointer', transition: 'all 0.15s',
                   border: '1px solid ' + (isSelected ? est.color : 'rgba(34,197,94,0.1)'),
                   background: isSelected ? est.color + '08' : '#0d1510',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s',
-                  marginBottom: '2px',
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                     <div style={{ fontFamily: "'Syne', sans-serif", fontSize: '15px', fontWeight: 600, color: '#f0fdf4' }}>{p.nombre}</div>
@@ -577,6 +626,11 @@ const styles = {
   title: { fontFamily: "'Syne', sans-serif", fontSize: '26px', fontWeight: 700, color: '#f0fdf4' },
   subtitle: { fontSize: '13px', color: '#6b7280', marginTop: '4px' },
   addBtn: { display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 16px', borderRadius: '10px', border: '1px solid', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", transition: 'all 0.2s' },
+  mapaCard: { background: '#0d1510', border: '1px solid rgba(34,197,94,0.15)', borderRadius: '16px', padding: '16px 18px', marginBottom: '20px' },
+  mapaHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' },
+  chartTitle: { fontFamily: "'Syne', sans-serif", fontSize: '14px', fontWeight: 600, color: '#f0fdf4' },
+  mapaBadge: { background: 'rgba(34,197,94,0.08)', color: '#4ade80', padding: '4px 10px', borderRadius: '20px', fontSize: '11px', border: '1px solid rgba(34,197,94,0.15)' },
+  mapaEmpty: { textAlign: 'center', padding: '40px', color: '#4b5563', fontSize: '13px', background: 'rgba(6,12,7,0.4)', borderRadius: '10px' },
   formCard: { background: '#0d1510', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '16px', padding: '22px 24px', marginBottom: '20px' },
   formTitle: { fontFamily: "'Syne', sans-serif", fontSize: '14px', fontWeight: 600, color: '#f0fdf4', marginBottom: '16px' },
   formGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' },
