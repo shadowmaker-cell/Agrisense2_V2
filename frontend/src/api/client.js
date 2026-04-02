@@ -78,3 +78,18 @@ export const mlAPI = {
   historial:           (tipo) => api.get(`/ml/api/v1/ml/predicciones${tipo ? '?tipo=' + tipo : ''}`),
   resultado:           (id) => api.get(`/ml/api/v1/ml/predicciones/${id}/resultado`),
 }
+
+// ── Recommendation Engine :8007 ───────────────────────
+export const recomendacionesAPI = {
+  health:     () => api.get('/recomendaciones/health'),
+  categorias: () => api.get('/recomendaciones/api/v1/recomendaciones/categorias'),
+  generar:    (data) => api.post('/recomendaciones/api/v1/recomendaciones/generar', data),
+  listar:     (params) => api.get('/recomendaciones/api/v1/recomendaciones/', { params }),
+  activas:    (parcela_id) => api.get(`/recomendaciones/api/v1/recomendaciones/activas${parcela_id ? '?parcela_id=' + parcela_id : ''}`),
+  obtener:    (id) => api.get(`/recomendaciones/api/v1/recomendaciones/${id}`),
+  crear:      (data) => api.post('/recomendaciones/api/v1/recomendaciones/', data),
+  actualizarEstado: (id, estado) => api.put(`/recomendaciones/api/v1/recomendaciones/${id}/estado`, { estado }),
+  porParcela: (id) => api.get(`/recomendaciones/api/v1/recomendaciones/parcela/${id}`),
+  porSensor:  (id) => api.get(`/recomendaciones/api/v1/recomendaciones/sensor/${id}`),
+  resumen:    () => api.get('/recomendaciones/api/v1/recomendaciones/resumen'),
+}

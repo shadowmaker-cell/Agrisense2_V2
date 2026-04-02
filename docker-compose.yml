@@ -15,6 +15,7 @@ services:
       - servicio-notificaciones
       - servicio-parcelas
       - servicio-ml
+      - servicio-recomendaciones
     restart: on-failure
 
   servicio-dispositivos:
@@ -123,6 +124,27 @@ services:
         condition: service_healthy
     restart: on-failure
 
+  servicio-recomendaciones:
+    build: ./servicio_recomendaciones
+    expose:
+      - "8007"
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql://postgres:1234@postgres-recomendaciones:5432/recomendaciones_db
+      DEVICE_SERVICE_URL: http://servicio-dispositivos:8001
+      INGESTA_SERVICE_URL: http://servicio-ingesta:8002
+      PROCESAMIENTO_SERVICE_URL: http://servicio-procesamiento:8003
+      PARCELAS_SERVICE_URL: http://servicio-parcelas:8005
+      ML_SERVICE_URL: http://servicio-ml:8006
+      JWT_SECRET: ${JWT_SECRET}
+      REFRESH_SECRET: ${REFRESH_SECRET}
+    depends_on:
+      postgres-recomendaciones:
+        condition: service_healthy
+      servicio-ml:
+        condition: service_started
+    restart: on-failure
+
   postgres-dispositivos:
     image: postgres:16-alpine
     environment:
@@ -207,6 +229,20 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres-recomendaciones:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "1234"
+      POSTGRES_DB: recomendaciones_db
+    volumes:
+      - postgres_recomendaciones_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
     environment:
@@ -228,3 +264,4 @@ volumes:
   postgres_notificaciones_data:
   postgres_parcelas_data:
   postgres_ml_data:
+  postgres_recomendaciones_data:
