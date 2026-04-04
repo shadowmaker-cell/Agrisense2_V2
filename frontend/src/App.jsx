@@ -8,6 +8,8 @@ import Alertas from './components/Alertas'
 import Notificaciones from './components/Notificaciones'
 import Lecturas from './components/Lecturas'
 import Parcelas from './components/Parcelas'
+import Recomendaciones from './components/Recomendaciones'
+import ML from './components/ML'
 
 export default function App() {
   const { user } = useAuth()
@@ -16,12 +18,14 @@ export default function App() {
   if (!user) return <Login />
 
   const pages = {
-    dashboard:      <Dashboard />,
-    dispositivos:   <Dispositivos />,
-    lecturas:       <Lecturas />,
-    alertas:        <Alertas />,
-    notificaciones: <Notificaciones />,
-    parcelas:       <Parcelas />,
+    dashboard:       <Dashboard />,
+    dispositivos:    <Dispositivos />,
+    lecturas:        <Lecturas />,
+    alertas:         <Alertas />,
+    notificaciones:  <Notificaciones />,
+    parcelas:        <Parcelas />,
+    recomendaciones: <Recomendaciones />,
+    ml:              <ML />,
   }
 
   return (

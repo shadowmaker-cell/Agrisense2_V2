@@ -35,6 +35,24 @@ const navItems = [
       <polyline points="9 22 9 12 15 12 15 22"/>
     </svg>
   )},
+  { id: 'recomendaciones', label: 'Recomendaciones', icon: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M9 11l3 3L22 4"/>
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+    </svg>
+  )},
+  { id: 'ml', label: 'Predicciones ML', icon: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+      <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+      <line x1="12" y1="22.08" x2="12" y2="12"/>
+    </svg>
+  )},
+]
+
+const SERVICIOS = [
+  'Dispositivos', 'Ingesta', 'Procesamiento',
+  'Notificaciones', 'Parcelas', 'ML', 'Recomendaciones',
 ]
 
 export default function Sidebar({ active, setActive }) {
@@ -76,7 +94,7 @@ export default function Sidebar({ active, setActive }) {
 
       <div style={styles.statusCard}>
         <div style={styles.statusTitle}>Estado del sistema</div>
-        {['Dispositivos', 'Ingesta', 'Procesamiento', 'Notificaciones', 'Parcelas'].map(s => (
+        {SERVICIOS.map(s => (
           <div key={s} style={styles.statusRow}>
             <div style={{ ...styles.statusDot, animation: 'pulse-green 2s infinite' }} />
             <span style={styles.statusLabel}>{s}</span>
@@ -145,13 +163,13 @@ const styles = {
   activeDot: { position: 'absolute', right: '10px', width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e' },
   statusCard: {
     margin: '12px 10px', background: 'rgba(6,12,7,0.6)',
-    border: '1px solid rgba(34,197,94,0.1)', borderRadius: '10px', padding: '12px',
+    border: '1px solid rgba(34,197,94,0.1)', borderRadius: '10px', padding: '10px 12px',
   },
-  statusTitle: { fontSize: '10px', fontWeight: 600, letterSpacing: '0.8px', color: '#4b5563', textTransform: 'uppercase', marginBottom: '8px' },
-  statusRow: { display: 'flex', alignItems: 'center', gap: '7px', padding: '3px 0' },
-  statusDot: { width: '7px', height: '7px', borderRadius: '50%', background: '#22c55e' },
-  statusLabel: { fontSize: '12px', color: '#9ca3af', flex: 1 },
-  statusOk: { fontSize: '11px', fontWeight: 600, color: '#22c55e' },
+  statusTitle: { fontSize: '10px', fontWeight: 600, letterSpacing: '0.8px', color: '#4b5563', textTransform: 'uppercase', marginBottom: '6px' },
+  statusRow: { display: 'flex', alignItems: 'center', gap: '7px', padding: '2px 0' },
+  statusDot: { width: '6px', height: '6px', borderRadius: '50%', background: '#22c55e' },
+  statusLabel: { fontSize: '11px', color: '#9ca3af', flex: 1 },
+  statusOk: { fontSize: '10px', fontWeight: 600, color: '#22c55e' },
   userCard: {
     display: 'flex', alignItems: 'center', gap: '10px',
     margin: '0 10px', padding: '12px',
@@ -165,5 +183,5 @@ const styles = {
   },
   userName: { fontSize: '13px', fontWeight: 600, color: '#f0fdf4', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
   userRole: { fontSize: '11px', color: '#4ade80' },
-  logoutBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#4b5563', padding: '4px', borderRadius: '6px', transition: 'all 0.15s' },
+  logoutBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#4b5563', padding: '4px', borderRadius: '6px' },
 }
