@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { ingestaAPI, procesamientoAPI, notificacionesAPI, dispositivosAPI } from '../api/client'
+import { ingestaAPI, procesamientoAPI, notificacionesAPI, dispositivosAPI, parcelasAPI, recomendacionesAPI } from '../api/client'
 
-// Configuracion de color y unidad por tipo de metrica
 const METRICA_CONFIG = {
   humedad_suelo:    { color: '#22c55e', unit: '%',    min: 5,    max: 95   },
   ph_suelo:         { color: '#a78bfa', unit: 'pH',   min: 4,    max: 9    },
@@ -20,10 +19,9 @@ const METRICA_CONFIG = {
   voltaje_bateria:  { color: '#facc15', unit: 'V',    min: 0,    max: 5    },
   potencia_solar:   { color: '#fde047', unit: 'V',    min: 0,    max: 50   },
   latencia_red:     { color: '#c084fc', unit: 'ms',   min: 0,    max: 2000 },
-  ciclos_bateria:   { color: '#e879f9', unit: 'ciclos',min: 0,   max: 1000 },
+  ciclos_bateria:   { color: '#e879f9', unit: 'ciclos',min: 0,  max: 1000 },
 }
 
-// Metrica por tipo de dispositivo
 const TIPO_METRICA = {
   1: 'humedad_suelo',     2: 'ph_suelo',        3: 'ec_suelo',
   4: 'temperatura_suelo', 5: 'temperatura_aire', 6: 'humedad_aire',
@@ -34,6 +32,15 @@ const TIPO_METRICA = {
 }
 
 const SEV_COLOR = { critica: '#f87171', alta: '#fbbf24', media: '#60a5fa', baja: '#22c55e' }
+
+const METRICA_CAMPO_REC = {
+  humedad_suelo:    'humedad_suelo',
+  temperatura_aire: 'temperatura_aire',
+  ph_suelo:         'ph_suelo',
+  lluvia:           'lluvia',
+  velocidad_viento: 'velocidad_viento',
+  humedad_aire:     'humedad_aire',
+}
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
@@ -59,7 +66,7 @@ export default function Lecturas() {
   const [autoSim, setAutoSim]     = useState(false)
   const [activeTab, setActiveTab] = useState('lectura')
   const [loteRows, setLoteRows]   = useState([])
-  const [loteMsg, setLoteMsg]         = useState('')
+  const [loteMsg, setLoteMsg]     = useState('')
   const [loteLoading, setLoteLoading] = useState(false)
 
   // ── Cargar sensores dinamicamente ─────────────────
@@ -68,18 +75,16 @@ export default function Lecturas() {
     try {
       const res = await dispositivosAPI.listar(0, 200)
       const todos = res.data
-      // Filtrar por estado si aplica
       const filtrados = filtroEstado === 'todos'
         ? todos
         : todos.filter(d => d.estado === filtroEstado)
 
-      // Mapear a formato util
       const mapeados = filtrados.map(d => {
         const metrica = TIPO_METRICA[d.tipo_dispositivo_id] || 'humedad_suelo'
         const config  = METRICA_CONFIG[metrica] || { color: '#22c55e', unit: '', min: 0, max: 100 }
         return {
           id:      d.id_logico,
-          label:   `${d.id_logico}`,
+          label:   d.id_logico,
           metric:  metrica,
           color:   config.color,
           unit:    config.unit,
@@ -87,12 +92,11 @@ export default function Lecturas() {
           max:     config.max,
           estado:  d.estado,
           tipo_id: d.tipo_dispositivo_id,
+          db_id:   d.id,
         }
       })
 
       setSensores(mapeados)
-
-      // Si no hay sensor seleccionado o el actual ya no existe, seleccionar el primero
       if (mapeados.length > 0) {
         setSensorSel(prev => {
           if (!prev) return mapeados[0]
@@ -102,8 +106,6 @@ export default function Lecturas() {
       } else {
         setSensorSel(null)
       }
-
-      // Actualizar filas del lote con los sensores actuales
       setLoteRows(mapeados.map(s => ({
         id_logico:    s.id,
         tipo_metrica: s.metric,
@@ -145,10 +147,36 @@ export default function Lecturas() {
     }
   }, [sensorSel])
 
+  // ── Buscar parcela asignada al sensor ─────────────
+  const buscarParcelaDelSensor = async (id_logico) => {
+    try {
+      const parcelasRes = await parcelasAPI.listar()
+      for (const parcela of parcelasRes.data) {
+        const asignado = parcela.sensores?.find(s => s.id_logico === id_logico && s.activo)
+        if (asignado) return parcela.id
+      }
+    } catch(e) {}
+    return null
+  }
+
+  // ── Generar recomendaciones automaticas ───────────
+  const generarRecomendacionesAuto = async (sensorData, resultado) => {
+    if (!resultado?.data?.alertas_generadas || resultado.data.alertas_generadas === 0) return
+    try {
+      const parcela_id = await buscarParcelaDelSensor(sensorData.id_logico)
+      const payload = { id_logico: sensorData.id_logico }
+      if (parcela_id) payload.parcela_id = parcela_id
+      const campo = METRICA_CAMPO_REC[sensorData.tipo_metrica]
+      if (campo) payload[campo] = sensorData.valor_metrica
+      await recomendacionesAPI.generar(payload)
+    } catch(e) {
+      console.warn('Recomendaciones auto no generadas:', e)
+    }
+  }
+
   useEffect(() => {
     if (!autoSim || !sensorSel) return
     const interval = setInterval(async () => {
-      // Verificar estado antes de cada lectura automatica
       try {
         const disps = await dispositivosAPI.listar(0, 200)
         const dispositivo = disps.data.find(d => d.id_logico === sensorSel.id)
@@ -187,6 +215,10 @@ export default function Lecturas() {
             severidad: resultado.data.alertas_generadas > 1 ? 'critica' : 'alta',
             canal: 'push',
           })
+          await generarRecomendacionesAuto(
+            { id_logico: sensorSel.id, tipo_metrica: sensorSel.metric, valor_metrica: val },
+            resultado
+          )
         }
         await loadLecturas(sensorSel)
         await loadAlertas(sensorSel)
@@ -205,7 +237,7 @@ export default function Lecturas() {
       const disps = await dispositivosAPI.listar(0, 200)
       const dispositivo = disps.data.find(d => d.id_logico === sensorSel.id)
       if (dispositivo && dispositivo.estado !== 'activo') {
-        setSimMsg(`Sensor ${sensorSel.id} esta en estado "${dispositivo.estado}" — no puede recibir lecturas`)
+        setSimMsg(`Sensor ${sensorSel.id} en estado "${dispositivo.estado}" — no puede recibir lecturas`)
         return
       }
     } catch(e) {}
@@ -237,7 +269,11 @@ export default function Lecturas() {
           severidad: resultado.data.alertas_generadas > 1 ? 'critica' : 'alta',
           canal: 'push',
         })
-        setSimMsg(`${resultado.data.alertas_generadas} alerta(s): ${tipos.join(', ')}`)
+        await generarRecomendacionesAuto(
+          { id_logico: sensorSel.id, tipo_metrica: sensorSel.metric, valor_metrica: val },
+          resultado
+        )
+        setSimMsg(`${resultado.data.alertas_generadas} alerta(s): ${tipos.join(', ')} — Recomendacion generada`)
       } else {
         setSimMsg(`Lectura ${val} ${sensorSel.unit} enviada — sin alertas`)
       }
@@ -284,9 +320,13 @@ export default function Lecturas() {
             severidad: resultado.data.alertas_generadas > 1 ? 'critica' : 'alta',
             canal: 'push',
           })
+          await generarRecomendacionesAuto(
+            { id_logico: fila.id_logico, tipo_metrica: fila.tipo_metrica, valor_metrica: val },
+            resultado
+          )
         }
       }
-      setLoteMsg(`${filas.length} lecturas enviadas · ${alertasTotal} alertas generadas`)
+      setLoteMsg(`${filas.length} lecturas enviadas · ${alertasTotal} alertas · recomendaciones generadas`)
       setLoteRows(prev => prev.map(r => ({ ...r, valor: '' })))
       if (sensorSel) {
         setTimeout(() => { loadLecturas(sensorSel); loadAlertas(sensorSel) }, 500)
@@ -295,7 +335,7 @@ export default function Lecturas() {
       setLoteMsg('Error enviando lote')
     } finally {
       setLoteLoading(false)
-      setTimeout(() => setLoteMsg(''), 5000)
+      setTimeout(() => setLoteMsg(''), 6000)
     }
   }
 
@@ -313,8 +353,6 @@ export default function Lecturas() {
   const maxVal  = lecturas.length ? Math.max(...lecturas.map(l => l.valor)).toFixed(1) : '—'
   const minVal  = lecturas.length ? Math.min(...lecturas.map(l => l.valor)).toFixed(1) : '—'
   const alertasFiltradas = filtroSev === 'todos' ? alertas : alertas.filter(a => a.severidad === filtroSev)
-
-  // Agrupar sensores por categoria para el selector
   const ESTADO_COLOR = { activo: '#22c55e', inactivo: '#6b7280', mantenimiento: '#fbbf24', desconectado: '#f87171' }
 
   return (
@@ -328,17 +366,11 @@ export default function Lecturas() {
           </p>
         </div>
         <div style={styles.headerRight}>
-          {/* Filtro de estado */}
-          <select
-            value={filtroEstado}
-            onChange={e => setFiltroEstado(e.target.value)}
-            style={styles.estadoSelect}
-          >
+          <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)} style={styles.estadoSelect}>
             <option value="activo">Solo activos</option>
             <option value="todos">Todos los estados</option>
             <option value="mantenimiento">Mantenimiento</option>
           </select>
-
           <button onClick={() => setAutoSim(!autoSim)} style={{
             ...styles.autoBtn,
             background:  autoSim ? 'rgba(34,197,94,0.15)' : 'rgba(107,114,128,0.1)',
@@ -348,7 +380,6 @@ export default function Lecturas() {
             <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: autoSim ? '#22c55e' : '#6b7280', animation: autoSim ? 'pulse-green 2s infinite' : 'none' }} />
             {autoSim ? 'Auto-sim ON' : 'Auto-sim OFF'}
           </button>
-
           <button onClick={() => { if (sensorSel) { loadLecturas(sensorSel); loadAlertas(sensorSel) } loadSensores() }} className="btn btn-ghost" style={{ fontSize: '12px' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
@@ -358,7 +389,6 @@ export default function Lecturas() {
         </div>
       </div>
 
-      {/* Tabs */}
       <div style={styles.tabsBar}>
         {[
           { id: 'lectura', label: 'Lectura individual' },
@@ -371,23 +401,16 @@ export default function Lecturas() {
         ))}
       </div>
 
-      {/* ── TAB: Lectura individual ── */}
       {activeTab === 'lectura' && (
         <>
-          {/* Selector de sensores dinamico */}
           {loadingSensores ? (
             <div style={styles.loadingGrid}>
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="skeleton" style={{ height: '56px', borderRadius: '10px' }} />
-              ))}
+              {[...Array(6)].map((_, i) => <div key={i} className="skeleton" style={{ height: '56px', borderRadius: '10px' }} />)}
             </div>
           ) : sensores.length === 0 ? (
             <div style={styles.noSensores}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="1.5" style={{ marginBottom: '8px' }}>
-                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-              </svg>
               <div>No hay sensores disponibles con el filtro seleccionado</div>
-              <div style={{ fontSize: '11px', marginTop: '4px', color: '#4b5563' }}>Cambia el filtro de estado o registra sensores en Dispositivos</div>
+              <div style={{ fontSize: '11px', marginTop: '4px', color: '#4b5563' }}>Cambia el filtro o registra sensores en Dispositivos</div>
             </div>
           ) : (
             <div style={styles.sensorGrid}>
@@ -411,15 +434,14 @@ export default function Lecturas() {
 
           {sensorSel && (
             <>
-              {/* Stats */}
               <div style={styles.statsRow}>
                 {[
-                  { label: 'Sensor',       val: sensorSel.id,                             color: sensorSel.color },
-                  { label: 'Ultimo valor', val: `${lastVal ?? '—'} ${sensorSel.unit}`,    color: sensorSel.color },
-                  { label: 'Promedio',     val: `${avg} ${sensorSel.unit}`,               color: '#60a5fa'       },
-                  { label: 'Maximo',       val: `${maxVal} ${sensorSel.unit}`,            color: '#f87171'       },
-                  { label: 'Minimo',       val: `${minVal} ${sensorSel.unit}`,            color: '#22c55e'       },
-                  { label: 'Lecturas',     val: lecturas.length,                           color: '#a78bfa'       },
+                  { label: 'Sensor',       val: sensorSel.id,                          color: sensorSel.color },
+                  { label: 'Ultimo valor', val: `${lastVal ?? '—'} ${sensorSel.unit}`, color: sensorSel.color },
+                  { label: 'Promedio',     val: `${avg} ${sensorSel.unit}`,            color: '#60a5fa'       },
+                  { label: 'Maximo',       val: `${maxVal} ${sensorSel.unit}`,         color: '#f87171'       },
+                  { label: 'Minimo',       val: `${minVal} ${sensorSel.unit}`,         color: '#22c55e'       },
+                  { label: 'Lecturas',     val: lecturas.length,                        color: '#a78bfa'       },
                 ].map(s => (
                   <div key={s.label} style={styles.statCard}>
                     <div style={styles.statLabel}>{s.label}</div>
@@ -428,7 +450,6 @@ export default function Lecturas() {
                 ))}
               </div>
 
-              {/* Chart */}
               <div className="card" style={{ marginBottom: '20px' }}>
                 <div style={styles.chartHeader}>
                   <div style={styles.chartTitle}>{sensorSel.id} — {sensorSel.metric} — Ultimas {lecturas.length} lecturas</div>
@@ -445,7 +466,7 @@ export default function Lecturas() {
                       <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
                     </svg>
                     <div>Sin datos para {sensorSel.id}</div>
-                    <div style={{ fontSize: '11px', marginTop: '4px', color: '#4b5563' }}>Usa el simulador de abajo para enviar lecturas</div>
+                    <div style={{ fontSize: '11px', marginTop: '4px', color: '#4b5563' }}>Usa el simulador para enviar lecturas</div>
                   </div>
                 ) : (
                   <ResponsiveContainer width="100%" height={220}>
@@ -466,7 +487,6 @@ export default function Lecturas() {
                 )}
               </div>
 
-              {/* Simulador + Alertas */}
               <div style={styles.bottomGrid}>
                 <div className="card" style={{ flex: 1 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
@@ -490,7 +510,7 @@ export default function Lecturas() {
                     <button onClick={handleSimular} className="btn btn-primary">Enviar</button>
                   </div>
                   {simMsg && (
-                    <div style={{ marginTop: '10px', fontSize: '13px', color: simMsg.includes('alerta') ? '#fbbf24' : simMsg.includes('Error') || simMsg.includes('estado') ? '#f87171' : '#22c55e' }}>
+                    <div style={{ marginTop: '10px', fontSize: '13px', color: simMsg.includes('alerta') || simMsg.includes('Recomendacion') ? '#fbbf24' : simMsg.includes('Error') || simMsg.includes('estado') ? '#f87171' : '#22c55e' }}>
                       {simMsg}
                     </div>
                   )}
@@ -536,7 +556,6 @@ export default function Lecturas() {
         </>
       )}
 
-      {/* ── TAB: Lote de lecturas ── */}
       {activeTab === 'lote' && (
         <div className="animate-fade">
           <div className="card">
@@ -544,7 +563,7 @@ export default function Lecturas() {
               <div>
                 <div style={styles.chartTitle}>Lote de lecturas — {sensores.length} sensores</div>
                 <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
-                  Todos los sensores registrados. Deja en blanco los que no quieras enviar.
+                  Deja en blanco los sensores que no quieras enviar. Si hay alertas se generan recomendaciones automaticamente.
                 </div>
               </div>
               <button onClick={generarLoteAleatorio} style={styles.genBtn}>
@@ -557,7 +576,7 @@ export default function Lecturas() {
 
             {loteRows.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px', color: '#4b5563', fontSize: '13px' }}>
-                No hay sensores disponibles. Registra sensores en la pagina de Dispositivos.
+                No hay sensores disponibles. Registra sensores en Dispositivos.
               </div>
             ) : (
               <>
@@ -566,7 +585,6 @@ export default function Lecturas() {
                   <div style={styles.loteHeader}>Metrica</div>
                   <div style={styles.loteHeader}>Valor</div>
                   <div style={styles.loteHeader}>Unidad</div>
-
                   {loteRows.map((row, i) => {
                     const sensor = sensores.find(s => s.id === row.id_logico)
                     return (
@@ -574,11 +592,7 @@ export default function Lecturas() {
                         <div key={`id-${i}`} style={styles.loteCell}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                             <span style={{ fontFamily: 'monospace', color: sensor?.color || '#4ade80', fontSize: '12px' }}>{row.id_logico}</span>
-                            {sensor && (
-                              <span style={{ fontSize: '10px', color: ESTADO_COLOR[sensor.estado] || '#6b7280' }}>
-                                {sensor.estado}
-                              </span>
-                            )}
+                            {sensor && <span style={{ fontSize: '10px', color: '#4b5563' }}>{sensor.estado}</span>}
                           </div>
                         </div>
                         <div key={`metric-${i}`} style={styles.loteCell}>

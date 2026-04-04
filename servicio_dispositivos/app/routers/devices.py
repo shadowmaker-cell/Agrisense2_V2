@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from datetime import datetime, timezone
 from app.database import get_db
 from app.models.device import (
@@ -12,91 +12,87 @@ from app.schemas.device import (
     CrearDispositivo, ActualizarDispositivo,
     RespuestaDispositivo, RespuestaTipoDispositivo,
     RespuestaMetricasDispositivo, CrearDespliegue,
-    RetirarDespliegue, RespuestaDespliegue
+    RetirarDespliegue, RespuestaDespliegue,
 )
 from app.events.producer import publicar_dispositivo_creado, publicar_dispositivo_actualizado
 
 router = APIRouter(prefix="/api/v1/dispositivos", tags=["Dispositivos"])
 
 
-# ══════════════════════════════════════════════════════
-# TIPOS DE SENSOR — solo lectura
-# ══════════════════════════════════════════════════════
+# ── Health ────────────────────────────────────────────
+@router.get("/health")
+def health():
+    return {"estado": "ok", "servicio": "device-management", "version": "1.0.0"}
 
+
+# ── Tipos de sensor ───────────────────────────────────
 @router.get("/tipos", response_model=List[RespuestaTipoDispositivo])
 def listar_tipos(db: Session = Depends(get_db)):
-    """Lista todos los tipos de sensor disponibles."""
     return db.query(TipoDispositivo).all()
 
 
 @router.get("/tipos/{tipo_id}", response_model=RespuestaTipoDispositivo)
 def obtener_tipo(tipo_id: int, db: Session = Depends(get_db)):
-    """Consulta un tipo de sensor por ID."""
     tipo = db.query(TipoDispositivo).filter(TipoDispositivo.id == tipo_id).first()
     if not tipo:
         raise HTTPException(status_code=404, detail="Tipo de sensor no encontrado")
     return tipo
 
 
-# ══════════════════════════════════════════════════════
-# DISPOSITIVOS — registro y gestión
-# ══════════════════════════════════════════════════════
-
+# ── Dispositivos ──────────────────────────────────────
 @router.post("/", response_model=RespuestaDispositivo, status_code=201)
 def registrar_dispositivo(payload: CrearDispositivo, db: Session = Depends(get_db)):
-    """Registra un nuevo sensor en el inventario."""
-
-    # Verifica que el tipo de sensor existe
+    """Registra un nuevo sensor. Permite asignar parcela y limites al crearlo."""
     tipo = db.query(TipoDispositivo).filter(
         TipoDispositivo.id == payload.tipo_dispositivo_id
     ).first()
     if not tipo:
-        raise HTTPException(status_code=404,
-                            detail="Tipo de sensor no encontrado")
+        raise HTTPException(status_code=404, detail="Tipo de sensor no encontrado")
 
-    # Verifica duplicados
     if db.query(Dispositivo).filter(
         Dispositivo.numero_serial == payload.numero_serial
     ).first():
-        raise HTTPException(status_code=400,
-                            detail="El número serial ya está registrado")
+        raise HTTPException(status_code=400, detail="El numero serial ya esta registrado")
 
     if db.query(Dispositivo).filter(
         Dispositivo.id_logico == payload.id_logico
     ).first():
-        raise HTTPException(status_code=400,
-                            detail="El ID lógico ya está en uso")
+        raise HTTPException(status_code=400, detail="El ID logico ya esta en uso")
 
-    # Crea el dispositivo
     dispositivo = Dispositivo(
         tipo_dispositivo_id=payload.tipo_dispositivo_id,
         id_logico=payload.id_logico,
         numero_serial=payload.numero_serial,
         version_firmware=payload.version_firmware,
-        estado=payload.estado
+        estado=payload.estado,
     )
     db.add(dispositivo)
     db.commit()
     db.refresh(dispositivo)
 
-    # Crea configuración por defecto
-    config = ConfiguracionDispositivo(dispositivo_id=dispositivo.id)
+    config = ConfiguracionDispositivo(
+        dispositivo_id=dispositivo.id,
+        limite_minimo=payload.limite_minimo,
+        limite_maximo=payload.limite_maximo,
+        parcela_id=payload.parcela_id,
+        parcela_nombre=payload.parcela_nombre,
+        posicion_campo=payload.posicion_campo,
+    )
     db.add(config)
     db.commit()
+    db.refresh(dispositivo)
 
-    # Publica evento a Kafka
     publicar_dispositivo_creado(dispositivo)
     return dispositivo
 
 
 @router.get("/", response_model=List[RespuestaDispositivo])
 def listar_dispositivos(
-    skip: int = 0,
-    limit: int = 50,
-    estado: str = None,
+    skip:   int           = 0,
+    limit:  int           = 100,
+    estado: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """Lista todos los sensores. Filtra por estado si se indica."""
     consulta = db.query(Dispositivo)
     if estado:
         consulta = consulta.filter(Dispositivo.estado == estado)
@@ -105,7 +101,6 @@ def listar_dispositivos(
 
 @router.get("/{dispositivo_id}", response_model=RespuestaDispositivo)
 def obtener_dispositivo(dispositivo_id: int, db: Session = Depends(get_db)):
-    """Consulta un sensor por su ID."""
     dispositivo = db.query(Dispositivo).filter(
         Dispositivo.id == dispositivo_id
     ).first()
@@ -120,44 +115,72 @@ def actualizar_dispositivo(
     payload: ActualizarDispositivo,
     db: Session = Depends(get_db)
 ):
-    """Actualiza estado o configuración de un sensor."""
+    """Actualiza estado, configuracion, limites y parcela asignada."""
     dispositivo = db.query(Dispositivo).filter(
         Dispositivo.id == dispositivo_id
     ).first()
     if not dispositivo:
         raise HTTPException(status_code=404, detail="Sensor no encontrado")
 
-    # Registra historial si cambia el estado
     if payload.estado and payload.estado != dispositivo.estado:
         historial = HistorialEstadoDispositivo(
             dispositivo_id=dispositivo.id,
             estado_anterior=dispositivo.estado,
-            estado_nuevo=payload.estado
+            estado_nuevo=payload.estado,
         )
         db.add(historial)
 
-    # Separa campos del dispositivo y de su configuración
     datos = payload.model_dump(exclude_unset=True)
-    campos_config = {"intervalo_muestreo", "protocolo_transmision", "umbral_bateria"}
+    campos_config = {
+        "intervalo_muestreo", "protocolo_transmision", "umbral_bateria",
+        "limite_minimo", "limite_maximo",
+        "parcela_id", "parcela_nombre", "posicion_campo",
+    }
 
     for campo, valor in datos.items():
         if campo in campos_config:
-            setattr(dispositivo.configuracion, campo, valor)
+            if dispositivo.configuracion:
+                setattr(dispositivo.configuracion, campo, valor)
         else:
             setattr(dispositivo, campo, valor)
 
     db.commit()
     db.refresh(dispositivo)
-
     publicar_dispositivo_actualizado(dispositivo)
     return dispositivo
 
 
 @router.get("/{dispositivo_id}/metricas", response_model=RespuestaMetricasDispositivo)
 def obtener_metricas_dispositivo(dispositivo_id: int, db: Session = Depends(get_db)):
+    dispositivo = db.query(Dispositivo).filter(
+        Dispositivo.id == dispositivo_id
+    ).first()
+    if not dispositivo:
+        raise HTTPException(status_code=404, detail="Sensor no encontrado")
+
+    limite_minimo = None
+    limite_maximo = None
+    if dispositivo.configuracion:
+        limite_minimo = dispositivo.configuracion.limite_minimo
+        limite_maximo = dispositivo.configuracion.limite_maximo
+
+    return RespuestaMetricasDispositivo(
+        dispositivo_id=dispositivo.id,
+        id_logico=dispositivo.id_logico,
+        tipo_dispositivo=dispositivo.tipo_dispositivo.nombre,
+        metricas_permitidas=dispositivo.tipo_dispositivo.metricas_permitidas,
+        estado=dispositivo.estado,
+        limite_minimo=limite_minimo,
+        limite_maximo=limite_maximo,
+    )
+
+
+# ── Hoja de vida del sensor ───────────────────────────
+@router.get("/{dispositivo_id}/hoja-de-vida")
+def hoja_de_vida(dispositivo_id: int, db: Session = Depends(get_db)):
     """
-    Devuelve las métricas permitidas para este sensor.
-    Usado por el microservicio de ingesta para filtrar datos.
+    Retorna la hoja de vida completa del sensor:
+    datos basicos, configuracion, historial de estados y despliegues.
     """
     dispositivo = db.query(Dispositivo).filter(
         Dispositivo.id == dispositivo_id
@@ -165,17 +188,59 @@ def obtener_metricas_dispositivo(dispositivo_id: int, db: Session = Depends(get_
     if not dispositivo:
         raise HTTPException(status_code=404, detail="Sensor no encontrado")
 
-    return RespuestaMetricasDispositivo(
-        dispositivo_id=dispositivo.id, # type: ignore
-        id_logico=dispositivo.id_logico, # type: ignore
-        tipo_dispositivo=dispositivo.tipo_dispositivo.nombre,
-        metricas_permitidas=dispositivo.tipo_dispositivo.metricas_permitidas,
-        estado=dispositivo.estado # type: ignore
-    )
+    historial = db.query(HistorialEstadoDispositivo).filter(
+        HistorialEstadoDispositivo.dispositivo_id == dispositivo_id
+    ).order_by(HistorialEstadoDispositivo.cambiado_en.desc()).all()
+
+    despliegues = db.query(DespliegueDispositivo).filter(
+        DespliegueDispositivo.dispositivo_id == dispositivo_id
+    ).order_by(DespliegueDispositivo.instalado_en.desc()).all()
+
+    config = dispositivo.configuracion
+
+    return {
+        "id":               dispositivo.id,
+        "id_logico":        dispositivo.id_logico,
+        "numero_serial":    dispositivo.numero_serial,
+        "tipo":             dispositivo.tipo_dispositivo.nombre,
+        "categoria":        dispositivo.tipo_dispositivo.categoria,
+        "estado":           dispositivo.estado,
+        "version_firmware": dispositivo.version_firmware,
+        "registrado_en":    dispositivo.registrado_en,
+        "ultima_conexion":  dispositivo.ultima_conexion,
+        "configuracion": {
+            "intervalo_muestreo":    config.intervalo_muestreo    if config else None,
+            "protocolo_transmision": config.protocolo_transmision if config else None,
+            "umbral_bateria":        config.umbral_bateria        if config else None,
+            "limite_minimo":         config.limite_minimo         if config else None,
+            "limite_maximo":         config.limite_maximo         if config else None,
+            "parcela_id":            config.parcela_id            if config else None,
+            "parcela_nombre":        config.parcela_nombre        if config else None,
+            "posicion_campo":        config.posicion_campo        if config else None,
+        } if config else None,
+        "total_cambios_estado": len(historial),
+        "total_despliegues":    len(despliegues),
+        "historial_estados": [
+            {
+                "estado_anterior": h.estado_anterior,
+                "estado_nuevo":    h.estado_nuevo,
+                "cambiado_en":     h.cambiado_en,
+            } for h in historial
+        ],
+        "despliegues": [
+            {
+                "lote_id":       d.lote_id,
+                "posicion":      d.posicion,
+                "estado":        d.estado,
+                "instalado_en":  d.instalado_en,
+                "retirado_en":   d.retirado_en,
+                "motivo_retiro": d.motivo_retiro,
+            } for d in despliegues
+        ],
+    }
 
 
-
-
+# ── Despliegues ───────────────────────────────────────
 @router.post("/{dispositivo_id}/despliegues",
              response_model=RespuestaDespliegue, status_code=201)
 def crear_despliegue(
@@ -183,31 +248,28 @@ def crear_despliegue(
     payload: CrearDespliegue,
     db: Session = Depends(get_db)
 ):
-    """Instala un sensor en un lote del huerto."""
     dispositivo = db.query(Dispositivo).filter(
         Dispositivo.id == dispositivo_id
     ).first()
     if not dispositivo:
         raise HTTPException(status_code=404, detail="Sensor no encontrado")
-
     if dispositivo.estado != "activo":
-        raise HTTPException(status_code=400,
-                            detail="Solo se pueden desplegar sensores activos")
+        raise HTTPException(status_code=400, detail="Solo se pueden desplegar sensores activos")
 
-    # Verifica que no haya otro despliegue activo para este sensor
     despliegue_activo = db.query(DespliegueDispositivo).filter(
         DespliegueDispositivo.dispositivo_id == dispositivo_id,
         DespliegueDispositivo.estado == "activo"
     ).first()
     if despliegue_activo:
-        raise HTTPException(status_code=400,
-                            detail=f"El sensor ya está desplegado en el lote "
-                                   f"{despliegue_activo.lote_id}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"El sensor ya esta desplegado en {despliegue_activo.lote_id}"
+        )
 
     despliegue = DespliegueDispositivo(
         dispositivo_id=dispositivo_id,
         lote_id=payload.lote_id,
-        posicion=payload.posicion
+        posicion=payload.posicion,
     )
     db.add(despliegue)
     db.commit()
@@ -215,15 +277,14 @@ def crear_despliegue(
     return despliegue
 
 
-@router.get("/{dispositivo_id}/despliegues", response_model=List[RespuestaDespliegue])
+@router.get("/{dispositivo_id}/despliegues",
+            response_model=List[RespuestaDespliegue])
 def historial_despliegues(dispositivo_id: int, db: Session = Depends(get_db)):
-    """Historial completo de despliegues de un sensor."""
     dispositivo = db.query(Dispositivo).filter(
         Dispositivo.id == dispositivo_id
     ).first()
     if not dispositivo:
         raise HTTPException(status_code=404, detail="Sensor no encontrado")
-
     return db.query(DespliegueDispositivo).filter(
         DespliegueDispositivo.dispositivo_id == dispositivo_id
     ).all()
@@ -236,44 +297,32 @@ def retirar_sensor(
     payload: RetirarDespliegue,
     db: Session = Depends(get_db)
 ):
-    """
-    Retira un sensor de su lote actual.
-    Si se indica reemplazado_por, instala automáticamente el sensor de reemplazo
-    en el mismo lote y posición.
-    """
-    # Busca despliegue activo
     despliegue = db.query(DespliegueDispositivo).filter(
         DespliegueDispositivo.dispositivo_id == dispositivo_id,
         DespliegueDispositivo.estado == "activo"
     ).first()
     if not despliegue:
-        raise HTTPException(status_code=404,
-                            detail="El sensor no tiene un despliegue activo")
+        raise HTTPException(status_code=404, detail="El sensor no tiene despliegue activo")
 
-    # Retira el sensor actual
-    despliegue.estado        = payload.estado
-    despliegue.motivo_retiro = payload.motivo_retiro
-    despliegue.retirado_en   = datetime.now(timezone.utc)
+    despliegue.estado          = payload.estado
+    despliegue.motivo_retiro   = payload.motivo_retiro
+    despliegue.retirado_en     = datetime.now(timezone.utc)
     despliegue.reemplazado_por = payload.reemplazado_por
 
-    # Si hay reemplazo, verifica que existe y lo despliega en el mismo lote
     if payload.reemplazado_por:
         reemplazo = db.query(Dispositivo).filter(
             Dispositivo.id == payload.reemplazado_por
         ).first()
         if not reemplazo:
-            raise HTTPException(status_code=404,
-                                detail="El sensor de reemplazo no existe")
+            raise HTTPException(status_code=404, detail="Sensor de reemplazo no existe")
         if reemplazo.estado != "activo":
-            raise HTTPException(status_code=400,
-                                detail="El sensor de reemplazo debe estar activo")
-
-        nuevo_despliegue = DespliegueDispositivo(
+            raise HTTPException(status_code=400, detail="El sensor de reemplazo debe estar activo")
+        nuevo = DespliegueDispositivo(
             dispositivo_id=payload.reemplazado_por,
             lote_id=despliegue.lote_id,
-            posicion=despliegue.posicion
+            posicion=despliegue.posicion,
         )
-        db.add(nuevo_despliegue)
+        db.add(nuevo)
 
     db.commit()
     db.refresh(despliegue)

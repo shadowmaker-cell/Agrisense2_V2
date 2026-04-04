@@ -55,18 +55,22 @@ class Dispositivo(Base):
 
 
 class ConfiguracionDispositivo(Base):
-    """Parámetros técnicos del sensor — editables por el usuario."""
+    """Parametros tecnicos del sensor — editables por el usuario."""
     __tablename__ = "configuracion_dispositivo"
 
     id                     = Column(Integer, primary_key=True, index=True)
     dispositivo_id         = Column(Integer, ForeignKey("dispositivo.id"),
                                     nullable=False, unique=True)
     intervalo_muestreo     = Column(Integer, default=300)
-    
     protocolo_transmision  = Column(String(10), default="HTTP")
-    
     umbral_bateria         = Column(SmallInteger, default=20)
-   
+    # Limites personalizados por sensor
+    limite_minimo          = Column(Float, nullable=True)
+    limite_maximo          = Column(Float, nullable=True)
+    # Parcela asignada
+    parcela_id             = Column(Integer, nullable=True)
+    parcela_nombre         = Column(String(100), nullable=True)
+    posicion_campo         = Column(String(100), nullable=True)
     actualizado_en         = Column(DateTime(timezone=True), onupdate=func.now())
 
     dispositivo = relationship("Dispositivo", back_populates="configuracion")

@@ -8,15 +8,15 @@ const api = axios.create({
 
 // ── Device Management Service :8001 ──────────────────
 export const dispositivosAPI = {
-  health:       () => api.get('/dispositivos/health'),
-  listar:       (skip = 0, limit = 100) => api.get(`/dispositivos/api/v1/dispositivos/?skip=${skip}&limit=${limit}`),
-  obtener:      (id) => api.get(`/dispositivos/api/v1/dispositivos/${id}`),
-  listarTipos:  () => api.get('/dispositivos/api/v1/dispositivos/tipos'),
-  metricas:     (id) => api.get(`/dispositivos/api/v1/dispositivos/${id}/metricas`),
-  registrar:    (data) => api.post('/dispositivos/api/v1/dispositivos/', data),
-  actualizar:   (id, data) => api.put(`/dispositivos/api/v1/dispositivos/${id}`, data),
+  health:      () => api.get('/dispositivos/health'),
+  listar:      (skip = 0, limit = 100) => api.get(`/dispositivos/api/v1/dispositivos/?skip=${skip}&limit=${limit}`),
+  obtener:     (id) => api.get(`/dispositivos/api/v1/dispositivos/${id}`),
+  listarTipos: () => api.get('/dispositivos/api/v1/dispositivos/tipos'),
+  metricas:    (id) => api.get(`/dispositivos/api/v1/dispositivos/${id}/metricas`),
+  registrar:   (data) => api.post('/dispositivos/api/v1/dispositivos/', data),
+  actualizar:  (id, data) => api.put(`/dispositivos/api/v1/dispositivos/${id}`, data),
+  hojaVida:    (id) => api.get(`/dispositivos/api/v1/dispositivos/${id}/hoja-de-vida`),
 }
-
 // ── IoT Ingestion Service :8002 ───────────────────────
 export const ingestaAPI = {
   health:         () => api.get('/ingesta/health'),

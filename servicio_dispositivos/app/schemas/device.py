@@ -23,7 +23,7 @@ class EstadoDespliegue(str, Enum):
     averiado      = "averiado"
 
 
-
+# ── Tipos de sensor ───────────────────────────────────
 class RespuestaTipoDispositivo(BaseModel):
     id:                  int
     nombre:              str
@@ -39,26 +39,51 @@ class RespuestaTipoDispositivo(BaseModel):
         from_attributes = True
 
 
+# ── Configuracion del sensor ──────────────────────────
+class RespuestaConfiguracion(BaseModel):
+    intervalo_muestreo:    Optional[int]
+    protocolo_transmision: Optional[str]
+    umbral_bateria:        Optional[int]
+    limite_minimo:         Optional[float]
+    limite_maximo:         Optional[float]
+    parcela_id:            Optional[int]
+    parcela_nombre:        Optional[str]
+    posicion_campo:        Optional[str]
 
+    class Config:
+        from_attributes = True
+
+
+# ── Crear dispositivo ─────────────────────────────────
 class CrearDispositivo(BaseModel):
-    tipo_dispositivo_id: int   = Field(..., description="ID del tipo de sensor")
-    id_logico:           str   = Field(..., min_length=3, max_length=50,
-                                       description="ID lógico único, ej: SOIL_HUM_02")
-    numero_serial:       str   = Field(..., min_length=3, max_length=100,
-                                       description="Serial físico del dispositivo")
+    tipo_dispositivo_id: int  = Field(..., description="ID del tipo de sensor")
+    id_logico:           str  = Field(..., min_length=3, max_length=50)
+    numero_serial:       str  = Field(..., min_length=3, max_length=100)
     version_firmware:    Optional[str] = Field(None, max_length=50)
     estado:              EstadoDispositivo = EstadoDispositivo.activo
+    # Parcela asignada al registrar
+    parcela_id:          Optional[int]   = None
+    parcela_nombre:      Optional[str]   = None
+    posicion_campo:      Optional[str]   = None
+    # Limites personalizados
+    limite_minimo:       Optional[float] = None
+    limite_maximo:       Optional[float] = None
 
 
-
+# ── Actualizar dispositivo ────────────────────────────
 class ActualizarDispositivo(BaseModel):
-    version_firmware:     Optional[str]              = None
-    estado:               Optional[EstadoDispositivo] = None
-    intervalo_muestreo:   Optional[int]               = Field(None, ge=10, le=86400,
-                                                        description="Intervalo en segundos")
-    protocolo_transmision: Optional[Protocolo]        = None
-    umbral_bateria:        Optional[int]              = Field(None, ge=0, le=100,
-                                                        description="% mínimo de batería")
+    version_firmware:      Optional[str]               = None
+    estado:                Optional[EstadoDispositivo]  = None
+    intervalo_muestreo:    Optional[int]                = Field(None, ge=10, le=86400)
+    protocolo_transmision: Optional[Protocolo]          = None
+    umbral_bateria:        Optional[int]                = Field(None, ge=0, le=100)
+    # Limites personalizados
+    limite_minimo:         Optional[float]              = None
+    limite_maximo:         Optional[float]              = None
+    # Parcela asignada
+    parcela_id:            Optional[int]                = None
+    parcela_nombre:        Optional[str]                = None
+    posicion_campo:        Optional[str]                = None
 
     @model_validator(mode="before")
     @classmethod
@@ -66,13 +91,11 @@ class ActualizarDispositivo(BaseModel):
         campos_protegidos = {"tipo_dispositivo_id", "id_logico", "numero_serial"}
         for campo in campos_protegidos:
             if campo in values:
-                raise ValueError(
-                    f"El campo '{campo}' no puede modificarse una vez registrado el sensor."
-                )
+                raise ValueError(f"El campo '{campo}' no puede modificarse.")
         return values
 
 
-
+# ── Respuesta dispositivo ─────────────────────────────
 class RespuestaDispositivo(BaseModel):
     id:                  int
     tipo_dispositivo_id: int
@@ -82,41 +105,37 @@ class RespuestaDispositivo(BaseModel):
     estado:              str
     registrado_en:       Optional[datetime]
     ultima_conexion:     Optional[datetime]
+    configuracion:       Optional[RespuestaConfiguracion] = None
 
     class Config:
         from_attributes = True
 
 
-
+# ── Metricas ──────────────────────────────────────────
 class RespuestaMetricasDispositivo(BaseModel):
     dispositivo_id:      int
     id_logico:           str
     tipo_dispositivo:    str
     metricas_permitidas: List[str]
     estado:              str
+    limite_minimo:       Optional[float] = None
+    limite_maximo:       Optional[float] = None
 
     class Config:
         from_attributes = True
 
 
-
+# ── Despliegues ───────────────────────────────────────
 class CrearDespliegue(BaseModel):
-    dispositivo_id: int  = Field(..., description="ID del sensor a desplegar")
-    lote_id:        str  = Field(..., min_length=2, max_length=50,
-                                  description="ID del lote, ej: LOTE-A1")
-    posicion:       Optional[str] = Field(None, max_length=100,
-                                           description="Posición dentro del lote")
-
+    dispositivo_id: int = Field(..., description="ID del sensor")
+    lote_id:        str = Field(..., min_length=2, max_length=50)
+    posicion:       Optional[str] = Field(None, max_length=100)
 
 
 class RetirarDespliegue(BaseModel):
-    motivo_retiro:   str = Field(..., min_length=5, max_length=200,
-                                  description="Motivo del retiro o reemplazo")
+    motivo_retiro:   str = Field(..., min_length=5, max_length=200)
     estado:          EstadoDespliegue = EstadoDespliegue.retirado
-    reemplazado_por: Optional[int]    = Field(None,
-                                              description="ID del sensor de reemplazo")
-
-
+    reemplazado_por: Optional[int]    = None
 
 
 class RespuestaDespliegue(BaseModel):
