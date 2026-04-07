@@ -180,30 +180,163 @@ export default function Dispositivos() {
 
   const handleCargarHojaVida = async () => {
     if (!selected) return
+    setHojaVida(null)
     try {
       const res = await dispositivosAPI.hojaVida(selected.id)
       setHojaVida(res.data)
-    } catch(e) { console.error(e) }
+    } catch(e) {
+      console.error('Error cargando hoja de vida:', e)
+      setHojaVida({ error: true })
+    }
+  }
+
+  const descargarHojaVida = () => {
+    if (!hojaVida || hojaVida.error) return
+    const hv        = hojaVida
+    const config    = hv.configuracion || {}
+    const historial = hv.historial_estados || []
+    const despliegues = hv.despliegues || []
+
+    const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Hoja de Vida — ${hv.id_logico}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#1a1a1a; padding:40px; max-width:800px; margin:auto; }
+  .logo { display:flex; align-items:center; gap:12px; margin-bottom:32px; padding-bottom:20px; border-bottom:3px solid #16a34a; }
+  .logo-icon { width:48px; height:48px; background:#16a34a; border-radius:10px; display:flex; align-items:center; justify-content:center; color:white; font-size:22px; }
+  .logo-text { font-size:22px; font-weight:800; color:#16a34a; }
+  .logo-sub { font-size:12px; color:#6b7280; }
+  h1 { font-size:20px; font-weight:700; color:#111; margin-bottom:4px; }
+  .subtitle { font-size:13px; color:#6b7280; margin-bottom:28px; }
+  .section { margin-bottom:24px; }
+  .section-title { font-size:12px; font-weight:700; color:#16a34a; text-transform:uppercase; letter-spacing:1px; margin-bottom:10px; padding-bottom:4px; border-bottom:1px solid #d1fae5; }
+  .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .item { background:#f9fafb; border-radius:8px; padding:10px 12px; border-left:3px solid #16a34a; }
+  .item-label { font-size:10px; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px; }
+  .item-value { font-size:13px; font-weight:600; color:#111; }
+  .table { width:100%; border-collapse:collapse; font-size:12px; }
+  .table th { background:#f0fdf4; padding:8px 10px; text-align:left; font-weight:600; color:#16a34a; border-bottom:1px solid #d1fae5; }
+  .table td { padding:7px 10px; border-bottom:1px solid #f3f4f6; color:#374151; }
+  .table tr:last-child td { border-bottom:none; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:10px; font-weight:600; }
+  .badge-activo { background:#d1fae5; color:#065f46; }
+  .badge-retirado { background:#f3f4f6; color:#6b7280; }
+  .badge-mantenimiento { background:#fef3c7; color:#92400e; }
+  .badge-desconectado { background:#fee2e2; color:#991b1b; }
+  .footer { margin-top:40px; padding-top:16px; border-top:1px solid #e5e7eb; font-size:11px; color:#9ca3af; display:flex; justify-content:space-between; }
+  @media print { body { padding:20px; } }
+</style>
+</head>
+<body>
+  <div class="logo">
+    <div class="logo-icon">🌿</div>
+    <div>
+      <div class="logo-text">AgriSense</div>
+      <div class="logo-sub">Plataforma de Agricultura de Precision</div>
+    </div>
+  </div>
+
+  <h1>Hoja de Vida del Sensor</h1>
+  <div class="subtitle">Generado el ${new Date().toLocaleString('es-CO')} · ID: ${hv.id_logico}</div>
+
+  <div class="section">
+    <div class="section-title">Datos del Sensor</div>
+    <div class="grid">
+      <div class="item"><div class="item-label">ID Logico</div><div class="item-value">${hv.id_logico}</div></div>
+      <div class="item"><div class="item-label">Serial</div><div class="item-value">${hv.numero_serial}</div></div>
+      <div class="item"><div class="item-label">Estado</div><div class="item-value">${hv.estado}</div></div>
+      <div class="item"><div class="item-label">Tipo</div><div class="item-value">${hv.tipo}</div></div>
+      <div class="item"><div class="item-label">Categoria</div><div class="item-value">${hv.categoria}</div></div>
+      <div class="item"><div class="item-label">Firmware</div><div class="item-value">${hv.version_firmware || 'N/A'}</div></div>
+      <div class="item"><div class="item-label">Registrado</div><div class="item-value">${hv.registrado_en ? new Date(hv.registrado_en).toLocaleDateString('es-CO') : '—'}</div></div>
+      <div class="item"><div class="item-label">Ultima conexion</div><div class="item-value">${hv.ultima_conexion ? new Date(hv.ultima_conexion).toLocaleDateString('es-CO') : 'Nunca'}</div></div>
+      <div class="item"><div class="item-label">Total despliegues</div><div class="item-value">${hv.total_despliegues}</div></div>
+    </div>
+  </div>
+
+  ${config ? `
+  <div class="section">
+    <div class="section-title">Configuracion Actual</div>
+    <div class="grid">
+      <div class="item"><div class="item-label">Intervalo muestreo</div><div class="item-value">${config.intervalo_muestreo || 300} seg</div></div>
+      <div class="item"><div class="item-label">Protocolo</div><div class="item-value">${config.protocolo_transmision || 'HTTP'}</div></div>
+      <div class="item"><div class="item-label">Umbral bateria</div><div class="item-value">${config.umbral_bateria || 20}%</div></div>
+      <div class="item"><div class="item-label">Limite minimo</div><div class="item-value">${config.limite_minimo != null ? config.limite_minimo : 'Por defecto'}</div></div>
+      <div class="item"><div class="item-label">Limite maximo</div><div class="item-value">${config.limite_maximo != null ? config.limite_maximo : 'Por defecto'}</div></div>
+      <div class="item"><div class="item-label">Parcela asignada</div><div class="item-value">${config.parcela_nombre || 'Sin asignar'}</div></div>
+      ${config.posicion_campo ? `<div class="item"><div class="item-label">Posicion campo</div><div class="item-value">${config.posicion_campo}</div></div>` : ''}
+    </div>
+  </div>` : ''}
+
+  ${historial.length > 0 ? `
+  <div class="section">
+    <div class="section-title">Historial de Estados (${historial.length} cambios)</div>
+    <table class="table">
+      <thead><tr><th>Estado Anterior</th><th>Estado Nuevo</th><th>Fecha</th></tr></thead>
+      <tbody>
+        ${historial.map(h => `
+        <tr>
+          <td>${h.estado_anterior || 'inicio'}</td>
+          <td><span class="badge badge-${h.estado_nuevo}">${h.estado_nuevo}</span></td>
+          <td>${h.cambiado_en ? new Date(h.cambiado_en).toLocaleString('es-CO') : '—'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>` : '<div class="section"><div class="section-title">Historial de Estados</div><p style="font-size:13px;color:#6b7280">Sin cambios de estado registrados.</p></div>'}
+
+  ${despliegues.length > 0 ? `
+  <div class="section">
+    <div class="section-title">Historial de Despliegues (${despliegues.length})</div>
+    <table class="table">
+      <thead><tr><th>Lote / Sector</th><th>Posicion</th><th>Estado</th><th>Instalado</th><th>Retirado</th></tr></thead>
+      <tbody>
+        ${despliegues.map(d => `
+        <tr>
+          <td>${d.lote_id}</td>
+          <td>${d.posicion || '—'}</td>
+          <td><span class="badge badge-${d.estado}">${d.estado}</span></td>
+          <td>${d.instalado_en ? new Date(d.instalado_en).toLocaleDateString('es-CO') : '—'}</td>
+          <td>${d.retirado_en ? new Date(d.retirado_en).toLocaleDateString('es-CO') : 'Activo'}</td>
+        </tr>
+        ${d.motivo_retiro ? `<tr><td colspan="5" style="font-size:11px;color:#ef4444;padding:4px 10px">Motivo: ${d.motivo_retiro}</td></tr>` : ''}`).join('')}
+      </tbody>
+    </table>
+  </div>` : '<div class="section"><div class="section-title">Despliegues</div><p style="font-size:13px;color:#6b7280">Sin despliegues registrados.</p></div>'}
+
+  <div class="footer">
+    <span>AgriSense — Plataforma de Agricultura de Precision</span>
+    <span>Generado: ${new Date().toLocaleString('es-CO')}</span>
+  </div>
+</body>
+</html>`
+
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+    const url  = URL.createObjectURL(blob)
+    const win  = window.open(url, '_blank')
+    if (win) {
+      win.onload = () => setTimeout(() => win.print(), 600)
+    }
   }
 
   const handleActualizar = async () => {
     if (!selected) return
     setEditMsg('')
     const payload = {}
-    if (editForm.estado)             payload.estado = editForm.estado
-    if (editForm.limite_minimo !== '') payload.limite_minimo = parseFloat(editForm.limite_minimo)
-    if (editForm.limite_maximo !== '') payload.limite_maximo = parseFloat(editForm.limite_maximo)
-    if (editForm.parcela_id !== '')   payload.parcela_id = parseInt(editForm.parcela_id)
-    if (editForm.parcela_nombre)      payload.parcela_nombre = editForm.parcela_nombre
-    if (editForm.posicion_campo)      payload.posicion_campo = editForm.posicion_campo
+    if (editForm.estado)                 payload.estado             = editForm.estado
+    if (editForm.limite_minimo !== '')   payload.limite_minimo      = parseFloat(editForm.limite_minimo)
+    if (editForm.limite_maximo !== '')   payload.limite_maximo      = parseFloat(editForm.limite_maximo)
+    if (editForm.parcela_id !== '')      payload.parcela_id         = parseInt(editForm.parcela_id)
+    if (editForm.parcela_nombre)         payload.parcela_nombre     = editForm.parcela_nombre
+    if (editForm.posicion_campo)         payload.posicion_campo     = editForm.posicion_campo
     if (editForm.intervalo_muestreo !== '') payload.intervalo_muestreo = parseInt(editForm.intervalo_muestreo)
-    if (editForm.umbral_bateria !== '') payload.umbral_bateria = parseInt(editForm.umbral_bateria)
+    if (editForm.umbral_bateria !== '')  payload.umbral_bateria     = parseInt(editForm.umbral_bateria)
     try {
       await dispositivosAPI.actualizar(selected.id, payload)
       setEditMsg('Configuracion actualizada correctamente')
       await load()
-      const updated = dispositivos.find(d => d.id === selected.id)
-      if (updated) setSelected({...updated, ...payload})
     } catch(e) { setEditMsg('Error al actualizar') }
   }
 
@@ -220,12 +353,11 @@ export default function Dispositivos() {
         version_firmware:    form.version_firmware,
         estado:              form.estado,
       }
-      if (form.parcela_id)     payload.parcela_id     = parseInt(form.parcela_id)
-      if (form.parcela_nombre) payload.parcela_nombre = form.parcela_nombre
-      if (form.posicion_campo) payload.posicion_campo = form.posicion_campo
-      if (form.limite_minimo !== '') payload.limite_minimo = parseFloat(form.limite_minimo)
-      if (form.limite_maximo !== '') payload.limite_maximo = parseFloat(form.limite_maximo)
-
+      if (form.parcela_id)          payload.parcela_id     = parseInt(form.parcela_id)
+      if (form.parcela_nombre)      payload.parcela_nombre = form.parcela_nombre
+      if (form.posicion_campo)      payload.posicion_campo = form.posicion_campo
+      if (form.limite_minimo !== '') payload.limite_minimo  = parseFloat(form.limite_minimo)
+      if (form.limite_maximo !== '') payload.limite_maximo  = parseFloat(form.limite_maximo)
       await dispositivosAPI.registrar(payload)
       setFormMsg('Sensor registrado exitosamente')
       await load()
@@ -276,7 +408,6 @@ export default function Dispositivos() {
           <div style={styles.formTitle}>Registrar nuevo sensor</div>
           <p style={styles.formDesc}>ID logico y serial se generan automaticamente. Puedes asignar una parcela y configurar limites desde el inicio.</p>
           <form onSubmit={handleRegistrar} style={styles.formGrid}>
-
             <div style={styles.fieldGroup}>
               <label style={styles.label}>Tipo de sensor</label>
               <select value={form.tipo_dispositivo_id}
@@ -284,7 +415,6 @@ export default function Dispositivos() {
                 {TIPO_OPCIONES.map(t => <option key={t.id} value={t.id}>{t.nombre} ({t.categoria})</option>)}
               </select>
             </div>
-
             <div style={styles.fieldGroup}>
               <label style={styles.label}>ID Logico * <span style={styles.hint}>formato: PREFIJO_NN</span></label>
               <input placeholder="ej: SOIL_HUM_02" value={form.id_logico}
@@ -292,7 +422,6 @@ export default function Dispositivos() {
                 style={{...styles.input, borderColor: formErrores.id_logico ? '#f87171' : 'rgba(34,197,94,0.15)'}} />
               {formErrores.id_logico && <div style={styles.errorMsg}>{formErrores.id_logico}</div>}
             </div>
-
             <div style={styles.fieldGroup}>
               <label style={styles.label}>Serial * <span style={styles.hint}>SN-ABC-XYZ-001</span></label>
               <input placeholder="ej: SN-HUM-CAP-002" value={form.numero_serial}
@@ -300,7 +429,6 @@ export default function Dispositivos() {
                 style={{...styles.input, borderColor: formErrores.numero_serial ? '#f87171' : 'rgba(34,197,94,0.15)'}} />
               {formErrores.numero_serial && <div style={styles.errorMsg}>{formErrores.numero_serial}</div>}
             </div>
-
             <div style={styles.fieldGroup}>
               <label style={styles.label}>Parcela asignada</label>
               <select value={form.parcela_id}
@@ -309,33 +437,28 @@ export default function Dispositivos() {
                 {parcelas.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
               </select>
             </div>
-
             <div style={styles.fieldGroup}>
               <label style={styles.label}>Posicion en campo</label>
               <input placeholder="ej: Sector norte, fila 3" value={form.posicion_campo}
                 onChange={e => setForm(p=>({...p,posicion_campo:e.target.value}))} style={styles.input} />
             </div>
-
             <div style={styles.fieldGroup}>
               <label style={styles.label}>Firmware</label>
               <input placeholder="1.0.0" value={form.version_firmware}
                 onChange={e => setForm(p=>({...p,version_firmware:e.target.value}))} style={styles.input} />
             </div>
-
             <div style={styles.fieldGroup}>
               <label style={styles.label}>Limite minimo personalizado</label>
               <input type="number" step="0.1" placeholder="Usa rango del tipo por defecto"
                 value={form.limite_minimo}
                 onChange={e => setForm(p=>({...p,limite_minimo:e.target.value}))} style={styles.input} />
             </div>
-
             <div style={styles.fieldGroup}>
               <label style={styles.label}>Limite maximo personalizado</label>
               <input type="number" step="0.1" placeholder="Usa rango del tipo por defecto"
                 value={form.limite_maximo}
                 onChange={e => setForm(p=>({...p,limite_maximo:e.target.value}))} style={styles.input} />
             </div>
-
             <div style={styles.fieldGroup}>
               <label style={styles.label}>Estado inicial</label>
               <select value={form.estado}
@@ -345,7 +468,6 @@ export default function Dispositivos() {
                 <option value="mantenimiento">Mantenimiento</option>
               </select>
             </div>
-
             <div style={{display:'flex',alignItems:'flex-end'}}>
               <button type="submit" disabled={formLoading} style={styles.submitBtn}>
                 {formLoading ? 'Registrando...' : 'Registrar sensor'}
@@ -396,7 +518,7 @@ export default function Dispositivos() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((d, i) => {
+                  {filtered.map((d) => {
                     const tipo     = getTipo(d.tipo_dispositivo_id)
                     const estColor = ESTADO_COLOR[d.estado] || '#6b7280'
                     const catStyle = CAT_STYLES[tipo?.categoria] || CAT_STYLES.infra
@@ -450,7 +572,10 @@ export default function Dispositivos() {
 
             <div style={styles.tabs}>
               {['info','editar','hoja-vida'].map(tab => (
-                <button key={tab} onClick={() => { setActiveTab(tab); if(tab==='hoja-vida') handleCargarHojaVida() }} style={{
+                <button key={tab} onClick={() => {
+                  setActiveTab(tab)
+                  if (tab === 'hoja-vida') handleCargarHojaVida()
+                }} style={{
                   ...styles.tab,
                   ...(activeTab===tab ? styles.tabActive : {})
                 }}>
@@ -464,7 +589,7 @@ export default function Dispositivos() {
               <>
                 <div style={styles.detailGrid}>
                   {[
-                    {label:'Estado',   value:selected.estado,  color:ESTADO_COLOR[selected.estado]},
+                    {label:'Estado',   value:selected.estado,                            color:ESTADO_COLOR[selected.estado]},
                     {label:'Firmware', value:selected.version_firmware||'N/A'},
                     {label:'Parcela',  value:selected.configuracion?.parcela_nombre||'Sin asignar', color:'#4ade80'},
                     {label:'Posicion', value:selected.configuracion?.posicion_campo||'—'},
@@ -530,19 +655,15 @@ export default function Dispositivos() {
                 </div>
                 <div style={styles.fieldGroup}>
                   <label style={styles.label}>Intervalo muestreo (seg)</label>
-                  <input type="number" placeholder="300"
-                    value={editForm.intervalo_muestreo}
+                  <input type="number" placeholder="300" value={editForm.intervalo_muestreo}
                     onChange={e => setEditForm(p=>({...p,intervalo_muestreo:e.target.value}))} style={styles.input} />
                 </div>
                 <div style={styles.fieldGroup}>
                   <label style={styles.label}>Umbral bateria (%)</label>
-                  <input type="number" placeholder="20"
-                    value={editForm.umbral_bateria}
+                  <input type="number" placeholder="20" value={editForm.umbral_bateria}
                     onChange={e => setEditForm(p=>({...p,umbral_bateria:e.target.value}))} style={styles.input} />
                 </div>
-                <button onClick={handleActualizar} style={styles.submitBtn}>
-                  Guardar cambios
-                </button>
+                <button onClick={handleActualizar} style={styles.submitBtn}>Guardar cambios</button>
                 {editMsg && (
                   <div style={{fontSize:'13px',color:editMsg.includes('Error')?'#f87171':'#22c55e'}}>
                     {editMsg}
@@ -558,18 +679,38 @@ export default function Dispositivos() {
                   <div style={{textAlign:'center',padding:'30px',color:'#4b5563',fontSize:'13px'}}>
                     Cargando hoja de vida...
                   </div>
+                ) : hojaVida.error ? (
+                  <div style={{textAlign:'center',padding:'30px',color:'#f87171',fontSize:'13px'}}>
+                    Error cargando la hoja de vida. Verifica que el servicio esta corriendo.
+                  </div>
                 ) : (
                   <>
+                    <button onClick={descargarHojaVida} style={{
+                      width:'100%', padding:'11px',
+                      background:'linear-gradient(135deg,#16a34a,#15803d)',
+                      color:'#fff', border:'none', borderRadius:'8px',
+                      fontSize:'13px', fontWeight:600, cursor:'pointer',
+                      fontFamily:"'DM Sans',sans-serif",
+                      display:'flex', alignItems:'center', justifyContent:'center', gap:'8px',
+                    }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                      </svg>
+                      Descargar / Imprimir PDF
+                    </button>
+
                     <div style={styles.hvSection}>
                       <div style={styles.hvTitle}>Resumen</div>
                       <div style={styles.detailGrid}>
                         {[
-                          {label:'Tipo',        value:hojaVida.tipo},
-                          {label:'Categoria',   value:hojaVida.categoria},
-                          {label:'Registrado',  value:hojaVida.registrado_en ? new Date(hojaVida.registrado_en).toLocaleDateString('es-CO') : '—'},
+                          {label:'Tipo',           value:hojaVida.tipo},
+                          {label:'Categoria',      value:hojaVida.categoria},
+                          {label:'Registrado',     value:hojaVida.registrado_en?new Date(hojaVida.registrado_en).toLocaleDateString('es-CO'):'—'},
                           {label:'Cambios estado', value:hojaVida.total_cambios_estado},
-                          {label:'Despliegues', value:hojaVida.total_despliegues},
-                          {label:'Ultima conexion', value:hojaVida.ultima_conexion ? new Date(hojaVida.ultima_conexion).toLocaleDateString('es-CO') : 'Nunca'},
+                          {label:'Despliegues',    value:hojaVida.total_despliegues},
+                          {label:'Ultima conexion',value:hojaVida.ultima_conexion?new Date(hojaVida.ultima_conexion).toLocaleDateString('es-CO'):'Nunca'},
                         ].map(item => (
                           <div key={item.label} style={styles.detailItem}>
                             <div style={styles.detailLabel}>{item.label}</div>
@@ -591,7 +732,7 @@ export default function Dispositivos() {
                                 <span style={{fontSize:'11px',fontWeight:600,color:ESTADO_COLOR[h.estado_nuevo]||'#f0fdf4'}}>{h.estado_nuevo}</span>
                               </div>
                               <div style={{fontSize:'10px',color:'#4b5563'}}>
-                                {h.cambiado_en ? new Date(h.cambiado_en).toLocaleString('es-CO') : '—'}
+                                {h.cambiado_en?new Date(h.cambiado_en).toLocaleString('es-CO'):'—'}
                               </div>
                             </div>
                           ))}
@@ -609,12 +750,12 @@ export default function Dispositivos() {
                                 <span style={{fontSize:'12px',fontWeight:600,color:'#f0fdf4'}}>Lote: {d.lote_id}</span>
                                 <span style={{fontSize:'11px',fontWeight:600,color:d.estado==='activo'?'#22c55e':'#6b7280'}}>{d.estado}</span>
                               </div>
-                              {d.posicion && <div style={{fontSize:'11px',color:'#9ca3af'}}>Pos: {d.posicion}</div>}
+                              {d.posicion&&<div style={{fontSize:'11px',color:'#9ca3af'}}>Pos: {d.posicion}</div>}
                               <div style={{fontSize:'10px',color:'#4b5563'}}>
-                                Instalado: {d.instalado_en ? new Date(d.instalado_en).toLocaleDateString('es-CO') : '—'}
-                                {d.retirado_en && ` · Retirado: ${new Date(d.retirado_en).toLocaleDateString('es-CO')}`}
+                                Instalado: {d.instalado_en?new Date(d.instalado_en).toLocaleDateString('es-CO'):'—'}
+                                {d.retirado_en&&` · Retirado: ${new Date(d.retirado_en).toLocaleDateString('es-CO')}`}
                               </div>
-                              {d.motivo_retiro && <div style={{fontSize:'11px',color:'#f87171'}}>Motivo: {d.motivo_retiro}</div>}
+                              {d.motivo_retiro&&<div style={{fontSize:'11px',color:'#f87171'}}>Motivo: {d.motivo_retiro}</div>}
                             </div>
                           ))}
                         </div>
@@ -626,12 +767,12 @@ export default function Dispositivos() {
                         <div style={styles.hvTitle}>Configuracion actual</div>
                         <div style={styles.detailGrid}>
                           {[
-                            {label:'Intervalo',    value:`${hojaVida.configuracion.intervalo_muestreo||300}s`},
-                            {label:'Protocolo',    value:hojaVida.configuracion.protocolo_transmision||'HTTP'},
-                            {label:'Bateria min',  value:`${hojaVida.configuracion.umbral_bateria||20}%`},
-                            {label:'Lim. Min',     value:hojaVida.configuracion.limite_minimo??'Defecto'},
-                            {label:'Lim. Max',     value:hojaVida.configuracion.limite_maximo??'Defecto'},
-                            {label:'Parcela',      value:hojaVida.configuracion.parcela_nombre||'Sin asignar'},
+                            {label:'Intervalo',   value:`${hojaVida.configuracion.intervalo_muestreo||300}s`},
+                            {label:'Protocolo',   value:hojaVida.configuracion.protocolo_transmision||'HTTP'},
+                            {label:'Bateria min', value:`${hojaVida.configuracion.umbral_bateria||20}%`},
+                            {label:'Lim. Min',    value:hojaVida.configuracion.limite_minimo??'Defecto'},
+                            {label:'Lim. Max',    value:hojaVida.configuracion.limite_maximo??'Defecto'},
+                            {label:'Parcela',     value:hojaVida.configuracion.parcela_nombre||'Sin asignar'},
                           ].map(item => (
                             <div key={item.label} style={styles.detailItem}>
                               <div style={styles.detailLabel}>{item.label}</div>
