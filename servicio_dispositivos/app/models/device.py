@@ -34,25 +34,25 @@ class Dispositivo(Base):
         ),
     )
 
-    id                 = Column(Integer, primary_key=True, index=True)
+    id                  = Column(Integer, primary_key=True, index=True)
+    usuario_id          = Column(Integer, nullable=True, index=True)
+    # NULL = dato global/admin, entero = pertenece a ese usuario
     tipo_dispositivo_id = Column(Integer, ForeignKey("tipo_dispositivo.id"), nullable=False)
-    id_logico          = Column(String(50), unique=True, nullable=False)
-    # Ej: SOIL_HUM_01, AIR_TEMP_01
-    numero_serial      = Column(String(100), nullable=False, unique=True)
-    version_firmware   = Column(String(50))
-    estado             = Column(String(20), default="activo")
-    registrado_en      = Column(DateTime(timezone=True), server_default=func.now())
-    ultima_conexion    = Column(DateTime(timezone=True))
+    id_logico           = Column(String(50), unique=True, nullable=False)
+    numero_serial       = Column(String(100), nullable=False, unique=True)
+    version_firmware    = Column(String(50))
+    estado              = Column(String(20), default="activo")
+    registrado_en       = Column(DateTime(timezone=True), server_default=func.now())
+    ultima_conexion     = Column(DateTime(timezone=True))
 
-    tipo_dispositivo   = relationship("TipoDispositivo")
-    configuracion      = relationship("ConfiguracionDispositivo",
-                                      back_populates="dispositivo", uselist=False)
-    historial_estados  = relationship("HistorialEstadoDispositivo",
-                                      back_populates="dispositivo")
-    despliegues        = relationship("DespliegueDispositivo",
-                                      foreign_keys="DespliegueDispositivo.dispositivo_id",
-                                      back_populates="dispositivo")
-
+    tipo_dispositivo  = relationship("TipoDispositivo")
+    configuracion     = relationship("ConfiguracionDispositivo",
+                                     back_populates="dispositivo", uselist=False)
+    historial_estados = relationship("HistorialEstadoDispositivo",
+                                     back_populates="dispositivo")
+    despliegues       = relationship("DespliegueDispositivo",
+                                     foreign_keys="DespliegueDispositivo.dispositivo_id",
+                                     back_populates="dispositivo")
 
 class ConfiguracionDispositivo(Base):
     """Parametros tecnicos del sensor — editables por el usuario."""

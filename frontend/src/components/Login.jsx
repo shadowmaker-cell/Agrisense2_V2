@@ -1,68 +1,68 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { authAPI } from '../api/client'
 
-const LEAVES = Array.from({ length: 18 }, (_, i) => ({
-  id: i,
-  left: Math.random() * 100,
-  delay: Math.random() * 8,
-  duration: 6 + Math.random() * 6,
-  size: 10 + Math.random() * 16,
-}))
+const DEPARTAMENTOS_CO = [
+  'Amazonas','Antioquia','Arauca','Atlantico','Bolivar','Boyaca','Caldas',
+  'Caqueta','Casanare','Cauca','Cesar','Choco','Cordoba','Cundinamarca',
+  'Guainia','Guaviare','Huila','La Guajira','Magdalena','Meta','Narino',
+  'Norte de Santander','Putumayo','Quindio','Risaralda','San Andres',
+  'Santander','Sucre','Tolima','Valle del Cauca','Vaupes','Vichada',
+]
 
 export default function Login() {
   const { login } = useAuth()
-  const [form, setForm] = useState({ usuario: '', contrasena: '' })
-  const [error, setError] = useState('')
+  const [tab, setTab]         = useState('login')
   const [loading, setLoading] = useState(false)
-  const [mounted, setMounted] = useState(false)
+  const [msg, setMsg]         = useState('')
+  const [msgType, setMsgType] = useState('error')
 
-  useEffect(() => { setMounted(true) }, [])
+  const [loginForm, setLoginForm] = useState({ email: '', password: '' })
 
-  const handleSubmit = async (e) => {
+  const [regForm, setRegForm] = useState({
+    nombres: '', apellidos: '',
+    tipo_documento: 'CC', numero_documento: '',
+    email: '', telefono: '',
+    ciudad: '', departamento: '',
+    password: '', confirmar_password: '',
+    acepta_tratamiento: false, acepta_terminos: false,
+  })
+
+  const handleLogin = async (e) => {
     e.preventDefault()
-    setError('')
-    if (!form.usuario || !form.contrasena) {
-      setError('Completa todos los campos')
-      return
-    }
-    setLoading(true)
-    await new Promise(r => setTimeout(r, 800))
-    if (form.contrasena.length >= 4) {
-      login(form)
-    } else {
-      setError('Contrasena minimo 4 caracteres')
-      setLoading(false)
-    }
+    setLoading(true); setMsg('')
+    try {
+      await login(loginForm.email, loginForm.password)
+    } catch(err) {
+      const detail = err?.response?.data?.detail
+      setMsg(detail || 'Correo o contrasena incorrectos')
+      setMsgType('error')
+    } finally { setLoading(false) }
+  }
+
+  const handleRegistro = async (e) => {
+    e.preventDefault()
+    setLoading(true); setMsg('')
+    try {
+      await authAPI.registro(regForm)
+      setMsg('Registro exitoso. Inicia sesion con tus credenciales.')
+      setMsgType('success')
+      setTimeout(() => { setTab('login'); setMsg('') }, 2000)
+    } catch(err) {
+      const detail = err?.response?.data?.detail
+      if (Array.isArray(detail)) {
+        setMsg(detail.map(d => d.msg).join(' · '))
+      } else {
+        setMsg(detail || 'Error al registrar usuario')
+      }
+      setMsgType('error')
+    } finally { setLoading(false) }
   }
 
   return (
-    <div style={styles.wrapper}>
-      {LEAVES.map(l => (
-        <div key={l.id} style={{
-          position: 'fixed',
-          left: `${l.left}%`,
-          top: '-20px',
-          width: l.size,
-          height: l.size,
-          background: 'radial-gradient(circle, #22c55e 0%, #16a34a 60%, transparent 100%)',
-          borderRadius: '50% 10% 50% 10%',
-          opacity: 0,
-          pointerEvents: 'none',
-          animation: `leaf-fall ${l.duration}s ${l.delay}s linear infinite`,
-        }} />
-      ))}
-
-      <div style={styles.grid} />
-      <div style={styles.orb1} />
-      <div style={styles.orb2} />
-
-      <div style={{
-        ...styles.card,
-        opacity: mounted ? 1 : 0,
-        transform: mounted ? 'none' : 'translateY(30px)',
-        transition: 'all 0.7s cubic-bezier(0.16, 1, 0.3, 1)',
-      }}>
-        <div style={styles.logoWrap}>
+    <div style={styles.page}>
+      <div style={styles.card}>
+        <div style={styles.logo}>
           <div style={styles.logoIcon}>
             <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
               <path d="M14 3C14 3 6 9 6 16a8 8 0 0 0 16 0C22 9 14 3 14 3Z" fill="#22c55e" opacity="0.9"/>
@@ -76,151 +76,250 @@ export default function Login() {
           </div>
         </div>
 
-        <div style={styles.divider} />
-        <h1 style={styles.title}>Bienvenido</h1>
-        <p style={styles.subtitle}>Ingresa tus credenciales para continuar</p>
+        <div style={styles.tabs}>
+          <button onClick={() => { setTab('login'); setMsg('') }} style={{
+            ...styles.tab, ...(tab === 'login' ? styles.tabActive : {})
+          }}>Iniciar sesion</button>
+          <button onClick={() => { setTab('registro'); setMsg('') }} style={{
+            ...styles.tab, ...(tab === 'registro' ? styles.tabActive : {})
+          }}>Registrarse</button>
+        </div>
 
-        <form onSubmit={handleSubmit} style={styles.form}>
-          <div style={styles.fieldGroup}>
-            <label style={styles.label}>Usuario</label>
-            <div style={styles.inputWrap}>
-              <svg style={styles.inputIcon} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                <circle cx="12" cy="7" r="4"/>
-              </svg>
-              <input
-                type="text"
-                placeholder="admin"
-                value={form.usuario}
-                onChange={e => setForm(p => ({...p, usuario: e.target.value}))}
-                style={styles.input}
-              />
+        {tab === 'login' && (
+          <form onSubmit={handleLogin} style={styles.form}>
+            <div style={styles.fieldGroup}>
+              <label style={styles.label}>Correo electronico</label>
+              <input type="email" placeholder="agricultor@agrisense.co"
+                value={loginForm.email}
+                onChange={e => setLoginForm(p => ({...p, email: e.target.value}))}
+                style={styles.input} required />
             </div>
-          </div>
-
-          <div style={styles.fieldGroup}>
-            <label style={styles.label}>Contrasena</label>
-            <div style={styles.inputWrap}>
-              <svg style={styles.inputIcon} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-              </svg>
-              <input
-                type="password"
-                placeholder="••••••••"
-                value={form.contrasena}
-                onChange={e => setForm(p => ({...p, contrasena: e.target.value}))}
-                style={styles.input}
-              />
+            <div style={styles.fieldGroup}>
+              <label style={styles.label}>Contrasena</label>
+              <input type="password" placeholder="Tu contrasena"
+                value={loginForm.password}
+                onChange={e => setLoginForm(p => ({...p, password: e.target.value}))}
+                style={styles.input} required />
             </div>
-          </div>
-
-          {error && (
-            <div style={styles.error}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-              </svg>
-              {error}
-            </div>
-          )}
-
-          <button type="submit" style={styles.btn} disabled={loading}>
-            {loading ? <span style={styles.spinner} /> : (
-              <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
-                  <polyline points="10 17 15 12 10 7"/>
-                  <line x1="15" y1="12" x2="3" y2="12"/>
-                </svg>
-                Ingresar al sistema
-              </>
+            {msg && (
+              <div style={{...styles.msg,
+                color: msgType === 'success' ? '#22c55e' : '#f87171',
+                background: msgType === 'success' ? 'rgba(34,197,94,0.08)' : 'rgba(248,113,113,0.08)'
+              }}>{msg}</div>
             )}
-          </button>
-        </form>
+            <button type="submit" disabled={loading} style={styles.submitBtn}>
+              {loading ? 'Iniciando sesion...' : 'Iniciar sesion'}
+            </button>
+          </form>
+        )}
 
-        <p style={styles.hint}>Demo: usuario <strong>admin</strong> · contrasena de 4+ caracteres</p>
+        {tab === 'registro' && (
+          <form onSubmit={handleRegistro} style={styles.form}>
+            <div style={styles.row}>
+              <div style={styles.fieldGroup}>
+                <label style={styles.label}>Nombres *</label>
+                <input placeholder="Juan Carlos" value={regForm.nombres}
+                  onChange={e => setRegForm(p => ({...p, nombres: e.target.value}))}
+                  style={styles.input} required />
+              </div>
+              <div style={styles.fieldGroup}>
+                <label style={styles.label}>Apellidos *</label>
+                <input placeholder="Rodriguez Perez" value={regForm.apellidos}
+                  onChange={e => setRegForm(p => ({...p, apellidos: e.target.value}))}
+                  style={styles.input} required />
+              </div>
+            </div>
+
+            <div style={styles.row}>
+              <div style={styles.fieldGroup}>
+                <label style={styles.label}>Tipo documento</label>
+                <select value={regForm.tipo_documento}
+                  onChange={e => setRegForm(p => ({...p, tipo_documento: e.target.value}))}
+                  style={styles.input}>
+                  <option value="CC">Cedula de ciudadania (CC)</option>
+                  <option value="CE">Cedula de extranjeria (CE)</option>
+                  <option value="NIT">NIT</option>
+                  <option value="PA">Pasaporte (PA)</option>
+                  <option value="TI">Tarjeta de identidad (TI)</option>
+                </select>
+              </div>
+              <div style={styles.fieldGroup}>
+                <label style={styles.label}>Numero de documento *</label>
+                <input placeholder="1234567890" value={regForm.numero_documento}
+                  onChange={e => setRegForm(p => ({...p, numero_documento: e.target.value}))}
+                  style={styles.input} required />
+              </div>
+            </div>
+
+            <div style={styles.fieldGroup}>
+              <label style={styles.label}>Correo electronico *</label>
+              <input type="email" placeholder="juan@agrisense.co" value={regForm.email}
+                onChange={e => setRegForm(p => ({...p, email: e.target.value}))}
+                style={styles.input} required />
+            </div>
+
+            <div style={styles.fieldGroup}>
+              <label style={styles.label}>
+                Celular colombiano * <span style={styles.hint}>10 digitos, ej: 3001234567</span>
+              </label>
+              <input placeholder="3001234567" value={regForm.telefono}
+                onChange={e => setRegForm(p => ({...p, telefono: e.target.value}))}
+                style={styles.input} required />
+            </div>
+
+            <div style={styles.row}>
+              <div style={styles.fieldGroup}>
+                <label style={styles.label}>Ciudad</label>
+                <input placeholder="Medellin" value={regForm.ciudad}
+                  onChange={e => setRegForm(p => ({...p, ciudad: e.target.value}))}
+                  style={styles.input} />
+              </div>
+              <div style={styles.fieldGroup}>
+                <label style={styles.label}>Departamento</label>
+                <select value={regForm.departamento}
+                  onChange={e => setRegForm(p => ({...p, departamento: e.target.value}))}
+                  style={styles.input}>
+                  <option value="">Seleccionar...</option>
+                  {DEPARTAMENTOS_CO.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div style={styles.fieldGroup}>
+              <label style={styles.label}>
+                Contrasena * <span style={styles.hint}>Min 8 chars, mayuscula, numero y especial</span>
+              </label>
+              <input type="password" placeholder="Agri$2026" value={regForm.password}
+                onChange={e => setRegForm(p => ({...p, password: e.target.value}))}
+                style={styles.input} required />
+            </div>
+
+            <div style={styles.fieldGroup}>
+              <label style={styles.label}>Confirmar contrasena *</label>
+              <input type="password" placeholder="Repite tu contrasena"
+                value={regForm.confirmar_password}
+                onChange={e => setRegForm(p => ({...p, confirmar_password: e.target.value}))}
+                style={styles.input} required />
+            </div>
+
+            <div style={styles.checkCard}>
+              <div style={styles.checkRow}>
+                <input type="checkbox" id="tratamiento"
+                  checked={regForm.acepta_tratamiento}
+                  onChange={e => setRegForm(p => ({...p, acepta_tratamiento: e.target.checked}))}
+                  style={styles.checkbox} />
+                <label htmlFor="tratamiento" style={styles.checkLabel}>
+                  Acepto el tratamiento de mis datos personales conforme a la{' '}
+                  <span style={{color:'#4ade80'}}>Ley 1581 de 2012</span> (Habeas Data Colombia) *
+                </label>
+              </div>
+              <div style={styles.checkRow}>
+                <input type="checkbox" id="terminos"
+                  checked={regForm.acepta_terminos}
+                  onChange={e => setRegForm(p => ({...p, acepta_terminos: e.target.checked}))}
+                  style={styles.checkbox} />
+                <label htmlFor="terminos" style={styles.checkLabel}>
+                  Acepto los <span style={{color:'#4ade80'}}>terminos y condiciones</span> del servicio AgriSense *
+                </label>
+              </div>
+            </div>
+
+            {msg && (
+              <div style={{...styles.msg,
+                color: msgType === 'success' ? '#22c55e' : '#f87171',
+                background: msgType === 'success' ? 'rgba(34,197,94,0.08)' : 'rgba(248,113,113,0.08)'
+              }}>{msg}</div>
+            )}
+
+            <button type="submit" disabled={loading} style={styles.submitBtn}>
+              {loading ? 'Registrando...' : 'Crear cuenta'}
+            </button>
+
+            <div style={styles.legalNote}>
+              🔒 Tus datos estan protegidos bajo la Ley 1581 de 2012 — Proteccion de Datos Personales de Colombia.
+              AgriSense garantiza la confidencialidad y seguridad de tu informacion.
+            </div>
+          </form>
+        )}
       </div>
 
       <style>{`
-        @keyframes leaf-fall {
-          0%   { transform: translateY(-40px) rotate(0deg); opacity: 0; }
-          10%  { opacity: 0.5; }
-          90%  { opacity: 0.2; }
-          100% { transform: translateY(110vh) rotate(540deg); opacity: 0; }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(20px); }
+          to   { opacity: 1; transform: none; }
         }
-        @keyframes float {
-          0%, 100% { transform: translateY(0px); }
-          50%       { transform: translateY(-10px); }
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        input:focus { outline: none; border-color: rgba(34,197,94,0.5) !important; box-shadow: 0 0 0 3px rgba(34,197,94,0.1) !important; }
-        button:not(:disabled):hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(22,163,74,0.35) !important; }
-        button:disabled { opacity: 0.7; cursor: not-allowed; }
       `}</style>
     </div>
   )
 }
 
 const styles = {
-  wrapper: {
-    minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    background: 'radial-gradient(ellipse at 20% 50%, #052e16 0%, #060c07 50%, #0a0a0a 100%)',
-    position: 'relative', overflow: 'hidden', padding: '20px',
+  page: {
+    minHeight: '100vh',
+    background: 'radial-gradient(ellipse at 60% 0%, rgba(22,163,74,0.08) 0%, transparent 60%), #060c07',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: '20px',
   },
-  grid: {
-    position: 'fixed', inset: 0, pointerEvents: 'none',
-    backgroundImage: `linear-gradient(rgba(34,197,94,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(34,197,94,0.03) 1px, transparent 1px)`,
-    backgroundSize: '60px 60px',
-  },
-  orb1: { position: 'fixed', top: '-20%', left: '-10%', width: '60vw', height: '60vw', borderRadius: '50%', background: 'radial-gradient(circle, rgba(22,163,74,0.08) 0%, transparent 70%)', pointerEvents: 'none' },
-  orb2: { position: 'fixed', bottom: '-20%', right: '-10%', width: '50vw', height: '50vw', borderRadius: '50%', background: 'radial-gradient(circle, rgba(34,197,94,0.05) 0%, transparent 70%)', pointerEvents: 'none' },
   card: {
-    position: 'relative', zIndex: 10,
-    background: 'rgba(13,21,16,0.85)', backdropFilter: 'blur(20px)',
-    border: '1px solid rgba(34,197,94,0.2)', borderRadius: '20px',
-    padding: '40px', width: '100%', maxWidth: '420px',
-    boxShadow: '0 25px 80px rgba(0,0,0,0.5), inset 0 1px 0 rgba(34,197,94,0.1)',
+    background: '#0d1510',
+    border: '1px solid rgba(34,197,94,0.15)',
+    borderRadius: '20px',
+    padding: '36px 40px',
+    width: '100%', maxWidth: '520px',
+    animation: 'fadeIn 0.4s ease both',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
   },
-  logoWrap: { display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' },
+  logo: { display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '28px' },
   logoIcon: {
     width: '48px', height: '48px', borderRadius: '12px',
-    background: 'rgba(22,163,74,0.15)', border: '1px solid rgba(34,197,94,0.3)',
+    background: 'rgba(22,163,74,0.15)', border: '1px solid rgba(34,197,94,0.25)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    animation: 'float 3s ease-in-out infinite',
   },
   logoText: { fontFamily: "'Syne', sans-serif", fontSize: '20px', fontWeight: 700, color: '#f0fdf4' },
-  logoSub: { fontSize: '11px', color: '#4ade80', marginTop: '1px' },
-  divider: { height: '1px', background: 'rgba(34,197,94,0.1)', marginBottom: '24px' },
-  title: { fontFamily: "'Syne', sans-serif", fontSize: '22px', fontWeight: 700, color: '#f0fdf4', marginBottom: '6px' },
-  subtitle: { fontSize: '13px', color: '#6b7280', marginBottom: '28px' },
-  form: { display: 'flex', flexDirection: 'column', gap: '16px' },
-  fieldGroup: { display: 'flex', flexDirection: 'column', gap: '6px' },
-  label: { fontSize: '12px', fontWeight: 500, color: '#86efac', letterSpacing: '0.5px' },
-  inputWrap: { position: 'relative' },
-  inputIcon: { position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#4ade80' },
+  logoSub: { fontSize: '11px', color: '#4ade80', marginTop: '2px' },
+  tabs: {
+    display: 'flex', gap: '4px', marginBottom: '24px',
+    background: 'rgba(6,12,7,0.6)', borderRadius: '10px', padding: '4px',
+    border: '1px solid rgba(34,197,94,0.1)',
+  },
+  tab: {
+    flex: 1, padding: '9px', borderRadius: '7px', border: 'none',
+    background: 'transparent', color: '#6b7280', fontSize: '13px',
+    fontWeight: 500, cursor: 'pointer',
+    fontFamily: "'DM Sans', sans-serif", transition: 'all 0.15s',
+  },
+  tabActive: { background: 'rgba(34,197,94,0.15)', color: '#22c55e' },
+  form: { display: 'flex', flexDirection: 'column', gap: '14px' },
+  row: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' },
+  fieldGroup: { display: 'flex', flexDirection: 'column', gap: '5px' },
+  label: { fontSize: '11px', fontWeight: 500, color: '#86efac', letterSpacing: '0.4px' },
+  hint: { color: '#4b5563', fontWeight: 400 },
   input: {
-    width: '100%', padding: '11px 14px 11px 38px',
-    background: 'rgba(6,12,7,0.8)', border: '1px solid rgba(34,197,94,0.15)',
-    borderRadius: '10px', color: '#f0fdf4', fontSize: '14px',
-    fontFamily: "'DM Sans', sans-serif", transition: 'all 0.2s',
+    padding: '10px 12px',
+    background: 'rgba(6,12,7,0.8)',
+    border: '1px solid rgba(34,197,94,0.15)',
+    borderRadius: '8px', color: '#f0fdf4', fontSize: '13px',
+    fontFamily: "'DM Sans', sans-serif", outline: 'none',
   },
-  error: {
-    display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 14px',
-    borderRadius: '8px', background: 'rgba(248,113,113,0.1)',
-    border: '1px solid rgba(248,113,113,0.2)', color: '#f87171', fontSize: '13px',
+  checkCard: {
+    background: 'rgba(6,12,7,0.6)', borderRadius: '10px',
+    padding: '14px', border: '1px solid rgba(34,197,94,0.1)',
+    display: 'flex', flexDirection: 'column', gap: '10px',
   },
-  btn: {
-    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-    padding: '13px', borderRadius: '10px', border: 'none',
-    background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)',
-    color: '#fff', fontSize: '14px', fontWeight: 600,
-    fontFamily: "'DM Sans', sans-serif", cursor: 'pointer',
-    transition: 'all 0.2s', boxShadow: '0 4px 15px rgba(22,163,74,0.25)', marginTop: '4px',
+  checkRow: { display: 'flex', gap: '10px', alignItems: 'flex-start' },
+  checkbox: { marginTop: '2px', accentColor: '#22c55e', width: '15px', height: '15px', cursor: 'pointer' },
+  checkLabel: { fontSize: '12px', color: '#9ca3af', lineHeight: 1.5, cursor: 'pointer' },
+  msg: { padding: '10px 14px', borderRadius: '8px', fontSize: '13px', lineHeight: 1.5 },
+  submitBtn: {
+    padding: '12px',
+    background: 'linear-gradient(135deg, #16a34a, #15803d)',
+    color: '#fff', border: 'none', borderRadius: '10px',
+    fontSize: '14px', fontWeight: 600, cursor: 'pointer',
+    fontFamily: "'DM Sans', sans-serif", transition: 'opacity 0.2s', marginTop: '4px',
   },
-  spinner: {
-    width: '18px', height: '18px', border: '2px solid rgba(255,255,255,0.3)',
-    borderTop: '2px solid #fff', borderRadius: '50%',
-    animation: 'spin 0.7s linear infinite', display: 'inline-block',
+  legalNote: {
+    fontSize: '11px', color: '#4b5563', lineHeight: 1.6,
+    background: 'rgba(6,12,7,0.4)', borderRadius: '8px',
+    padding: '10px 12px', textAlign: 'center',
   },
-  hint: { marginTop: '20px', fontSize: '12px', color: '#374151', textAlign: 'center' },
 }
