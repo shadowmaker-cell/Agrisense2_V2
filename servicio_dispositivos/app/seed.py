@@ -1,10 +1,9 @@
 from app.database import SessionLocal
-from app.models.device import TipoDispositivo, Dispositivo, ConfiguracionDispositivo
+from app.models.device import TipoDispositivo
 
 
 def poblar_tipos_dispositivo(db):
     tipos = [
-        # ── Suelo ────────────────────────────────────────────
         dict(nombre="Higrómetro de Suelo",   categoria="suelo",
              unidad="%",        rango_minimo=0,    rango_maximo=100,
              umbral_alerta="< 20% (Marchitez)",
@@ -29,7 +28,6 @@ def poblar_tipos_dispositivo(db):
              tipo_pin="Digital OneWire",
              metricas_permitidas=["temperatura_suelo"]),
 
-        # ── Ambiental ────────────────────────────────────────
         dict(nombre="Termómetro Aire",        categoria="ambiental",
              unidad="°C",       rango_minimo=-40,  rango_maximo=80,
              umbral_alerta="> 35°C (Estrés Térmico)",
@@ -60,7 +58,6 @@ def poblar_tipos_dispositivo(db):
              tipo_pin="Digital Pulse",
              metricas_permitidas=["precipitacion"]),
 
-        # ── Agua ─────────────────────────────────────────────
         dict(nombre="pH de Agua",             categoria="agua",
              unidad="pH",       rango_minimo=0,    rango_maximo=14,
              umbral_alerta="!= 6.5 (Agua no apta)",
@@ -85,7 +82,6 @@ def poblar_tipos_dispositivo(db):
              tipo_pin="Digital Relé D5",
              metricas_permitidas=["consumo_amperaje", "voltaje"]),
 
-        # ── Infraestructura ───────────────────────────────────
         dict(nombre="Controlador MCU",        categoria="infraestructura",
              unidad="Metadato", rango_minimo=None, rango_maximo=None,
              umbral_alerta="Uptime < 1 min (Reinicio)",
@@ -130,72 +126,14 @@ def poblar_tipos_dispositivo(db):
         if not existe:
             db.add(TipoDispositivo(**t))
     db.commit()
-    print(f"✓ {len(tipos)} tipos de sensor insertados")
-
-
-def poblar_dispositivos(db):
-    def obtener_tipo_id(nombre):
-        t = db.query(TipoDispositivo).filter(
-            TipoDispositivo.nombre == nombre
-        ).first()
-        return t.id if t else None
-
-    dispositivos = [
-        dict(id_logico="SOIL_HUM_01",  numero_serial="SN-HUM-CAP-001",
-             tipo_dispositivo_id=obtener_tipo_id("Higrómetro de Suelo")),
-        dict(id_logico="SOIL_PH_01",   numero_serial="SN-PHS-450-001",
-             tipo_dispositivo_id=obtener_tipo_id("pH de Suelo")),
-        dict(id_logico="SOIL_EC_01",   numero_serial="SN-EC-DS1-001",
-             tipo_dispositivo_id=obtener_tipo_id("Sensor EC de Suelo")),
-        dict(id_logico="SOIL_TEMP_01", numero_serial="28-FF-64-12-3D",
-             tipo_dispositivo_id=obtener_tipo_id("Temperatura de Suelo")),
-        dict(id_logico="AIR_TEMP_01",  numero_serial="SN-DHT22-001",
-             tipo_dispositivo_id=obtener_tipo_id("Termómetro Aire")),
-        dict(id_logico="AIR_HUM_01",   numero_serial="SN-DHT22-002",
-             tipo_dispositivo_id=obtener_tipo_id("Higrómetro Aire")),
-        dict(id_logico="LUX_01",       numero_serial="SN-BH1750-001",
-             tipo_dispositivo_id=obtener_tipo_id("Luxómetro")),
-        dict(id_logico="WIND_01",      numero_serial="SN-WIND-991",
-             tipo_dispositivo_id=obtener_tipo_id("Anemómetro")),
-        dict(id_logico="RAIN_01",      numero_serial="SN-RAIN-442",
-             tipo_dispositivo_id=obtener_tipo_id("Pluviómetro")),
-        dict(id_logico="WAT_PH_01",    numero_serial="SN-PHW-BNC-001",
-             tipo_dispositivo_id=obtener_tipo_id("pH de Agua")),
-        dict(id_logico="WAT_FLOW_01",  numero_serial="SN-FLOW-YFS-01",
-             tipo_dispositivo_id=obtener_tipo_id("Caudalímetro")),
-        dict(id_logico="VALVE_01",     numero_serial="SN-SOL-12V-01",
-             tipo_dispositivo_id=obtener_tipo_id("Electroválvula")),
-        dict(id_logico="PUMP_01",      numero_serial="SN-PUMP-220-01",
-             tipo_dispositivo_id=obtener_tipo_id("Bomba de Agua")),
-        dict(id_logico="MCU_01",       numero_serial="SN-MEGA-2560",
-             tipo_dispositivo_id=obtener_tipo_id("Controlador MCU")),
-        dict(id_logico="ETH_01",       numero_serial="DE:AD:BE:EF:01",
-             tipo_dispositivo_id=obtener_tipo_id("Interfaz Red")),
-        dict(id_logico="BATT_01",      numero_serial="SN-LIPO-10AH",
-             tipo_dispositivo_id=obtener_tipo_id("Batería")),
-        dict(id_logico="SOLAR_01",     numero_serial="SN-POLY-50W",
-             tipo_dispositivo_id=obtener_tipo_id("Panel Solar")),
-    ]
-
-    for d in dispositivos:
-        existe = db.query(Dispositivo).filter(
-            Dispositivo.id_logico == d["id_logico"]
-        ).first()
-        if not existe:
-            dispositivo = Dispositivo(**d)
-            db.add(dispositivo)
-            db.flush()
-            db.add(ConfiguracionDispositivo(dispositivo_id=dispositivo.id))
-    db.commit()
-    print(f"✓ {len(dispositivos)} dispositivos insertados")
+    print(f"✓ {len(tipos)} tipos de sensor verificados")
 
 
 def ejecutar_seed():
     db = SessionLocal()
     try:
         poblar_tipos_dispositivo(db)
-        poblar_dispositivos(db)
-        print("✓ Datos iniciales cargados exitosamente")
+        print("✓ Seed completado — tipos de sensor listos")
     finally:
         db.close()
 

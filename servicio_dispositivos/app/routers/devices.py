@@ -26,7 +26,7 @@ def health():
     return {"estado": "ok", "servicio": "device-management", "version": "1.0.0"}
 
 
-# ── Tipos de sensor (globales, sin filtro usuario) ────
+# ── Tipos de sensor ───────────────────────────────────
 @router.get("/tipos", response_model=List[RespuestaTipoDispositivo])
 def listar_tipos(db: Session = Depends(get_db)):
     return db.query(TipoDispositivo).all()
@@ -47,7 +47,6 @@ def registrar_dispositivo(
     request: Request,
     db: Session = Depends(get_db)
 ):
-    """Registra un nuevo sensor asignado al usuario autenticado."""
     usuario_id = get_usuario_id(request)
 
     tipo = db.query(TipoDispositivo).filter(
@@ -57,12 +56,14 @@ def registrar_dispositivo(
         raise HTTPException(status_code=404, detail="Tipo de sensor no encontrado")
 
     if db.query(Dispositivo).filter(
-        Dispositivo.numero_serial == payload.numero_serial
+        Dispositivo.numero_serial == payload.numero_serial,
+        Dispositivo.usuario_id == usuario_id
     ).first():
         raise HTTPException(status_code=400, detail="El numero serial ya esta registrado")
 
     if db.query(Dispositivo).filter(
-        Dispositivo.id_logico == payload.id_logico
+        Dispositivo.id_logico == payload.id_logico,
+        Dispositivo.usuario_id == usuario_id
     ).first():
         raise HTTPException(status_code=400, detail="El ID logico ya esta en uso")
 
@@ -102,7 +103,6 @@ def listar_dispositivos(
     estado: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """Lista sensores del usuario autenticado."""
     usuario_id = get_usuario_id(request)
     consulta = db.query(Dispositivo).filter(
         Dispositivo.usuario_id == usuario_id
@@ -185,20 +185,15 @@ def obtener_metricas_dispositivo(
     if not dispositivo:
         raise HTTPException(status_code=404, detail="Sensor no encontrado")
 
-    limite_minimo = None
-    limite_maximo = None
-    if dispositivo.configuracion:
-        limite_minimo = dispositivo.configuracion.limite_minimo
-        limite_maximo = dispositivo.configuracion.limite_maximo
-
+    config = dispositivo.configuracion
     return RespuestaMetricasDispositivo(
         dispositivo_id=dispositivo.id,
         id_logico=dispositivo.id_logico,
         tipo_dispositivo=dispositivo.tipo_dispositivo.nombre,
         metricas_permitidas=dispositivo.tipo_dispositivo.metricas_permitidas,
         estado=dispositivo.estado,
-        limite_minimo=limite_minimo,
-        limite_maximo=limite_maximo,
+        limite_minimo=config.limite_minimo if config else None,
+        limite_maximo=config.limite_maximo if config else None,
     )
 
 

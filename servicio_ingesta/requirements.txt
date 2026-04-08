@@ -10,3 +10,5 @@ kafka-python
 pytest
 httpx
 slowapi
+openpyxl
+python-jose[cryptography]

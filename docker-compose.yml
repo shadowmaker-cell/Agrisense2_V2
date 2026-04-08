@@ -192,13 +192,14 @@ services:
       retries: 5
 
   postgres-ingesta:
-    image: postgres:16-alpine
+    image: timescale/timescaledb:latest-pg16
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: "1234"
       POSTGRES_DB: ingesta_db
     volumes:
       - postgres_ingesta_data:/var/lib/postgresql/data
+      - ./servicio_ingesta/scripts/init_timescale.sql:/docker-entrypoint-initdb.d/init_timescale.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
