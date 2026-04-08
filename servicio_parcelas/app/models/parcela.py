@@ -27,11 +27,11 @@ class Parcela(Base):
     __tablename__ = "parcela"
 
     id              = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    usuario_id      = Column(Integer, nullable=True, index=True)
     nombre          = Column(String(100), nullable=False)
     descripcion     = Column(Text, nullable=True)
     area_hectareas  = Column(Float, nullable=False)
     tipo_suelo      = Column(String(50), nullable=True)
-    # arcilloso / arenoso / limoso / franco / otro
     latitud         = Column(Float, nullable=True)
     longitud        = Column(Float, nullable=True)
     altitud_msnm    = Column(Float, nullable=True)
@@ -39,14 +39,12 @@ class Parcela(Base):
     municipio       = Column(String(100), nullable=True)
     vereda          = Column(String(100), nullable=True)
     estado          = Column(String(20), default='activa')
-    # activa / inactiva / en_preparacion
     propietario_id  = Column(Integer, nullable=True)
     creada_en       = Column(DateTime(timezone=True), server_default=func.now())
     actualizada_en  = Column(DateTime(timezone=True), onupdate=func.now())
 
-    sensores        = relationship("ParcelaSensor",    back_populates="parcela", cascade="all, delete-orphan")
-    historial       = relationship("HistorialCultivo", back_populates="parcela", cascade="all, delete-orphan")
-
+    sensores  = relationship("ParcelaSensor",    back_populates="parcela", cascade="all, delete-orphan")
+    historial = relationship("HistorialCultivo", back_populates="parcela", cascade="all, delete-orphan")
 
 class ParcelaSensor(Base):
     """Asignacion de sensores IoT a parcelas."""

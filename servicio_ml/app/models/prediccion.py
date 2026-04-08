@@ -30,17 +30,17 @@ class SolicitudPrediccion(Base):
     __tablename__ = "solicitud_prediccion"
 
     id              = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    usuario_id      = Column(Integer, nullable=True, index=True)
     modelo_id       = Column(Integer, ForeignKey("modelo_registro.id"), nullable=False)
     parcela_id      = Column(Integer, nullable=True)
     id_logico       = Column(String(50), nullable=True)
     tipo_prediccion = Column(String(50), nullable=False)
     datos_entrada   = Column(JSON, nullable=False)
     estado          = Column(String(20), default="pendiente")
-    # pendiente | procesando | completado | fallido
     solicitado_en   = Column(DateTime(timezone=True), server_default=func.now())
 
-    modelo          = relationship("ModeloRegistro", back_populates="predicciones")
-    resultado       = relationship("ResultadoPrediccion", back_populates="solicitud", uselist=False)
+    modelo   = relationship("ModeloRegistro", back_populates="predicciones")
+    resultado = relationship("ResultadoPrediccion", back_populates="solicitud", uselist=False)
 
 
 class ResultadoPrediccion(Base):

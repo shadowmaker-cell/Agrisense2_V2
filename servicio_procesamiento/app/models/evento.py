@@ -7,10 +7,11 @@ from app.database import Base
 
 
 class EventoProcesado(Base):
-    """Registro de eventos de telemetría procesados."""
+    """Registro de eventos de telemetria procesados."""
     __tablename__ = "evento_procesado"
 
     id                = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    usuario_id        = Column(Integer, nullable=True, index=True)
     dispositivo_id    = Column(Integer, nullable=False, index=True)
     id_logico         = Column(String(50), nullable=False, index=True)
     tipo_metrica      = Column(String(50), nullable=False)
@@ -27,20 +28,18 @@ class AlertaStream(Base):
     __tablename__ = "alerta_stream"
 
     id              = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    usuario_id      = Column(Integer, nullable=True, index=True)
     dispositivo_id  = Column(Integer, nullable=False, index=True)
     id_logico       = Column(String(50), nullable=False, index=True)
     tipo_metrica    = Column(String(50), nullable=False)
     valor_detectado = Column(Float, nullable=False)
     condicion       = Column(String(255), nullable=False)
     severidad       = Column(String(20), nullable=False)
-    # baja / media / alta / critica
     tipo_alerta     = Column(String(50), nullable=False)
-    # helada / sequia / hongo / viento / inundacion / bateria / etc
     generada_en     = Column(DateTime(timezone=True), server_default=func.now())
     notificada      = Column(Boolean, default=False)
     evento_id       = Column(Integer, nullable=True)
-
-
+    
 class ReglaAplicada(Base):
     """Registro de reglas de negocio aplicadas."""
     __tablename__ = "regla_aplicada"

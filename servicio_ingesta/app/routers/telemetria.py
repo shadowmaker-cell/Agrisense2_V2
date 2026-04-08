@@ -6,26 +6,25 @@ import httpx
 import os
 
 from app.database import get_db
-from app.models.lectura import LecturaSensor, LoteIngesta, ErrorIngesta
+from app.models.lectura import LecturaSensor, LoteIngesta, ErrorIngesta, AlertaGenerada
 from app.schemas.lectura import (
     LecturaEntrada, LoteEntrada,
     LecturaRespuesta, LoteRespuesta,
-    AlertaRespuesta, UltimasLecturasRespuesta
+    AlertaRespuesta,
 )
 from app.services.validador import validar_lectura, detectar_alertas, normalizar_timestamp
 from app.services.alertas import procesar_alertas
 from app.events.producer import publish_telemetry_raw, publish_alert_generated, publish_batch_completed
+from app.utils.jwt import get_usuario_id, get_usuario_id_opcional
 
 router = APIRouter(prefix="/api/v1/telemetria", tags=["telemetria"])
 
 _contadores = {}
 LIMITE_POR_MINUTO = 60
-
 DEVICE_SERVICE_URL = os.getenv("DEVICE_SERVICE_URL", "http://localhost:8001")
 
 
 def verificar_rate_limit(id_logico: str) -> bool:
-    """Verifica que el dispositivo no exceda 60 lecturas por minuto."""
     ahora = datetime.now(timezone.utc)
     minuto_actual = ahora.strftime("%Y%m%d%H%M")
     clave = f"{id_logico}:{minuto_actual}"
@@ -36,56 +35,47 @@ def verificar_rate_limit(id_logico: str) -> bool:
     return _contadores[clave] <= LIMITE_POR_MINUTO
 
 
-def verificar_estado_dispositivo(id_logico: str) -> tuple[bool, str]:
-    """
-    Consulta el servicio de dispositivos para verificar
-    que el sensor este activo antes de aceptar lecturas.
-    Retorna (permitido, motivo).
-    """
+def verificar_estado_dispositivo(id_logico: str) -> tuple:
     try:
         url = f"{DEVICE_SERVICE_URL}/api/v1/dispositivos/"
         response = httpx.get(url, timeout=3.0)
         if response.status_code == 200:
             dispositivos = response.json()
             dispositivo = next(
-                (d for d in dispositivos if d.get("id_logico") == id_logico),
-                None
+                (d for d in dispositivos if d.get("id_logico") == id_logico), None
             )
             if dispositivo is None:
-                # Si no existe en el catalogo lo dejamos pasar
                 return True, ""
             estado = dispositivo.get("estado", "activo")
             if estado != "activo":
                 return False, f"Dispositivo {id_logico} esta en estado '{estado}' — lecturas rechazadas"
     except Exception:
-        # Si el servicio no responde, dejamos pasar la lectura
         pass
     return True, ""
 
 
-def procesar_una_lectura(lectura_data: LecturaEntrada, db: Session, lote_id: int = None):
-    """Procesa una lectura individual: valida estado, valida rango, persiste, detecta alertas."""
-
-    # 1. Verificar rate limit
+def procesar_una_lectura(
+    lectura_data: LecturaEntrada,
+    db: Session,
+    lote_id: int = None,
+    usuario_id: int = None,
+):
     if not verificar_rate_limit(lectura_data.id_logico):
         return None, "rate_limit", f"{lectura_data.id_logico} excedio {LIMITE_POR_MINUTO} lecturas/min"
 
-    # 2. Verificar estado del dispositivo
     permitido, motivo = verificar_estado_dispositivo(lectura_data.id_logico)
     if not permitido:
         return None, "dispositivo_inactivo", motivo
 
-    # 3. Validar rango de la metrica
     bandera, razon_error = validar_lectura(
         lectura_data.tipo_metrica,
         lectura_data.valor_metrica
     )
 
-    # 4. Normalizar timestamp
     ts = normalizar_timestamp(lectura_data.timestamp_lectura)
 
-    # 5. Persistir lectura
     lectura = LecturaSensor(
+        usuario_id=usuario_id,
         dispositivo_id=lectura_data.dispositivo_id,
         id_logico=lectura_data.id_logico,
         tipo_metrica=lectura_data.tipo_metrica,
@@ -100,7 +90,6 @@ def procesar_una_lectura(lectura_data: LecturaEntrada, db: Session, lote_id: int
 
     publish_telemetry_raw(lectura)
 
-    # 6. Detectar alertas
     alertas_detectadas = detectar_alertas(
         lectura_data.tipo_metrica,
         lectura_data.valor_metrica
@@ -111,7 +100,8 @@ def procesar_una_lectura(lectura_data: LecturaEntrada, db: Session, lote_id: int
         id_logico=lectura_data.id_logico,
         tipo_metrica=lectura_data.tipo_metrica,
         valor=lectura_data.valor_metrica,
-        alertas_detectadas=alertas_detectadas
+        alertas_detectadas=alertas_detectadas,
+        usuario_id=usuario_id,
     )
 
     for alerta in alertas_guardadas:
@@ -120,13 +110,15 @@ def procesar_una_lectura(lectura_data: LecturaEntrada, db: Session, lote_id: int
     return lectura, bandera, razon_error
 
 
+# ── Lectura individual ────────────────────────────────
 @router.post("/", response_model=LecturaRespuesta, status_code=201)
 def recibir_lectura(
     payload: LecturaEntrada,
+    request: Request,
     db: Session = Depends(get_db)
 ):
-    """Recibe una lectura individual de un sensor IoT."""
-    lectura, bandera, razon_error = procesar_una_lectura(payload, db)
+    usuario_id = get_usuario_id_opcional(request)
+    lectura, bandera, razon_error = procesar_una_lectura(payload, db, usuario_id=usuario_id)
 
     if lectura is None:
         if bandera == "rate_limit":
@@ -136,10 +128,7 @@ def recibir_lectura(
         raise HTTPException(status_code=400, detail=razon_error)
 
     if bandera == "invalido":
-        error = ErrorIngesta(
-            payload_raw=payload.model_dump_json(),
-            razon_error=razon_error
-        )
+        error = ErrorIngesta(payload_raw=payload.model_dump_json(), razon_error=razon_error)
         db.add(error)
 
     db.commit()
@@ -147,12 +136,14 @@ def recibir_lectura(
     return lectura
 
 
+# ── Lote ──────────────────────────────────────────────
 @router.post("/lote", response_model=LoteRespuesta, status_code=201)
 def recibir_lote(
     payload: LoteEntrada,
+    request: Request,
     db: Session = Depends(get_db)
 ):
-    """Recibe un lote de lecturas de sensores IoT."""
+    usuario_id = get_usuario_id_opcional(request)
     lote = LoteIngesta(
         tipo_origen=payload.tipo_origen,
         total_registros=len(payload.lecturas)
@@ -160,22 +151,19 @@ def recibir_lote(
     db.add(lote)
     db.flush()
 
-    validos   = 0
-    invalidos = 0
+    validos = invalidos = 0
 
     for lectura_data in payload.lecturas:
         lectura, bandera, razon_error = procesar_una_lectura(
-            lectura_data, db, lote_id=lote.id
+            lectura_data, db, lote_id=lote.id, usuario_id=usuario_id
         )
-
         if lectura is None or bandera == "invalido":
             invalidos += 1
-            error = ErrorIngesta(
+            db.add(ErrorIngesta(
                 lote_id=lote.id,
                 payload_raw=lectura_data.model_dump_json(),
                 razon_error=razon_error
-            )
-            db.add(error)
+            ))
         else:
             validos += 1
 
@@ -197,36 +185,36 @@ def recibir_lote(
     )
 
 
+# ── Ultimas lecturas ──────────────────────────────────
 @router.get("/ultimas/{id_logico}", response_model=List[LecturaRespuesta])
 def ultimas_lecturas(
     id_logico: str,
+    request: Request,
     limite: int = 10,
     db: Session = Depends(get_db)
 ):
-    """Retorna las ultimas lecturas de un sensor especifico."""
-    lecturas = db.query(LecturaSensor).filter(
-        LecturaSensor.id_logico == id_logico
-    ).order_by(
-        LecturaSensor.timestamp_lectura.desc()
-    ).limit(limite).all()
-
+    usuario_id = get_usuario_id_opcional(request)
+    query = db.query(LecturaSensor).filter(LecturaSensor.id_logico == id_logico)
+    if usuario_id:
+        query = query.filter(LecturaSensor.usuario_id == usuario_id)
+    lecturas = query.order_by(LecturaSensor.timestamp_lectura.desc()).limit(limite).all()
     if not lecturas:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No se encontraron lecturas para {id_logico}"
-        )
+        raise HTTPException(status_code=404, detail=f"No se encontraron lecturas para {id_logico}")
     return lecturas
 
 
+# ── Alertas ───────────────────────────────────────────
 @router.get("/alertas", response_model=List[AlertaRespuesta])
 def listar_alertas(
+    request: Request,
     severidad: str = None,
     limite: int = 50,
     db: Session = Depends(get_db)
 ):
-    """Lista las alertas generadas durante la ingesta."""
-    from app.models.lectura import AlertaGenerada
+    usuario_id = get_usuario_id_opcional(request)
     query = db.query(AlertaGenerada)
+    if usuario_id:
+        query = query.filter(AlertaGenerada.usuario_id == usuario_id)
     if severidad:
         query = query.filter(AlertaGenerada.severidad == severidad)
     return query.order_by(AlertaGenerada.generada_en.desc()).limit(limite).all()
@@ -235,20 +223,15 @@ def listar_alertas(
 @router.get("/alertas/{id_logico}", response_model=List[AlertaRespuesta])
 def alertas_por_dispositivo(
     id_logico: str,
+    request: Request,
     limite: int = 20,
     db: Session = Depends(get_db)
 ):
-    """Lista alertas de un dispositivo especifico."""
-    from app.models.lectura import AlertaGenerada
-    alertas = db.query(AlertaGenerada).filter(
-        AlertaGenerada.id_logico == id_logico
-    ).order_by(
-        AlertaGenerada.generada_en.desc()
-    ).limit(limite).all()
-
+    usuario_id = get_usuario_id_opcional(request)
+    query = db.query(AlertaGenerada).filter(AlertaGenerada.id_logico == id_logico)
+    if usuario_id:
+        query = query.filter(AlertaGenerada.usuario_id == usuario_id)
+    alertas = query.order_by(AlertaGenerada.generada_en.desc()).limit(limite).all()
     if not alertas:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No se encontraron alertas para {id_logico}"
-        )
+        raise HTTPException(status_code=404, detail=f"No se encontraron alertas para {id_logico}")
     return alertas

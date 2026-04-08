@@ -8,7 +8,6 @@ DEVICE_SERVICE_URL = os.getenv("DEVICE_SERVICE_URL", "http://localhost:8001")
 
 
 def verificar_dispositivo(id_logico: str) -> dict:
-    """Consulta el servicio de dispositivos para verificar que el sensor existe."""
     try:
         url = f"{DEVICE_SERVICE_URL}/api/v1/dispositivos/"
         res = httpx.get(url, timeout=3.0)
@@ -21,23 +20,24 @@ def verificar_dispositivo(id_logico: str) -> dict:
 
 
 # ── Parcelas ──────────────────────────────────────────
-def crear_parcela(db: Session, data: ParcelaEntrada) -> Parcela:
-    parcela = Parcela(**data.model_dump())
+def crear_parcela(db: Session, data: ParcelaEntrada, usuario_id: int) -> Parcela:
+    parcela = Parcela(**data.model_dump(), usuario_id=usuario_id)
     db.add(parcela)
     db.commit()
     db.refresh(parcela)
     return parcela
 
 
-def listar_parcelas(db: Session, estado: str = None) -> list:
+def listar_parcelas(db: Session, estado: str = None, usuario_id: int = None) -> list:
     query = db.query(Parcela).options(
         joinedload(Parcela.sensores),
         joinedload(Parcela.historial).joinedload(HistorialCultivo.tipo_cultivo)
     )
+    if usuario_id:
+        query = query.filter(Parcela.usuario_id == usuario_id)
     if estado:
         query = query.filter(Parcela.estado == estado)
     parcelas = query.order_by(Parcela.creada_en.desc()).all()
-    # Enriquecer historial con nombre del tipo de cultivo
     for p in parcelas:
         for h in p.historial:
             if h.tipo_cultivo:
@@ -45,11 +45,14 @@ def listar_parcelas(db: Session, estado: str = None) -> list:
     return parcelas
 
 
-def obtener_parcela(db: Session, parcela_id: int) -> Parcela:
-    parcela = db.query(Parcela).options(
+def obtener_parcela(db: Session, parcela_id: int, usuario_id: int = None) -> Parcela:
+    query = db.query(Parcela).options(
         joinedload(Parcela.sensores),
         joinedload(Parcela.historial).joinedload(HistorialCultivo.tipo_cultivo)
-    ).filter(Parcela.id == parcela_id).first()
+    ).filter(Parcela.id == parcela_id)
+    if usuario_id:
+        query = query.filter(Parcela.usuario_id == usuario_id)
+    parcela = query.first()
     if parcela:
         for h in parcela.historial:
             if h.tipo_cultivo:
@@ -57,8 +60,11 @@ def obtener_parcela(db: Session, parcela_id: int) -> Parcela:
     return parcela
 
 
-def actualizar_parcela(db: Session, parcela_id: int, data: dict) -> Parcela:
-    parcela = db.query(Parcela).filter(Parcela.id == parcela_id).first()
+def actualizar_parcela(db: Session, parcela_id: int, data: dict, usuario_id: int = None) -> Parcela:
+    query = db.query(Parcela).filter(Parcela.id == parcela_id)
+    if usuario_id:
+        query = query.filter(Parcela.usuario_id == usuario_id)
+    parcela = query.first()
     if not parcela:
         return None
     for key, val in data.items():
@@ -69,8 +75,11 @@ def actualizar_parcela(db: Session, parcela_id: int, data: dict) -> Parcela:
     return parcela
 
 
-def eliminar_parcela(db: Session, parcela_id: int) -> bool:
-    parcela = db.query(Parcela).filter(Parcela.id == parcela_id).first()
+def eliminar_parcela(db: Session, parcela_id: int, usuario_id: int = None) -> bool:
+    query = db.query(Parcela).filter(Parcela.id == parcela_id)
+    if usuario_id:
+        query = query.filter(Parcela.usuario_id == usuario_id)
+    parcela = query.first()
     if not parcela:
         return False
     db.delete(parcela)
@@ -79,16 +88,7 @@ def eliminar_parcela(db: Session, parcela_id: int) -> bool:
 
 
 # ── Sensores de parcela ───────────────────────────────
-def asignar_sensor(
-    db: Session,
-    parcela_id: int,
-    data: ParcelaSensorEntrada
-) -> tuple:
-    """
-    Asigna un sensor a una parcela.
-    Verifica que el sensor existe en el servicio de dispositivos.
-    Retorna (sensor, error).
-    """
+def asignar_sensor(db: Session, parcela_id: int, data: ParcelaSensorEntrada) -> tuple:
     parcela = db.query(Parcela).filter(Parcela.id == parcela_id).first()
     if not parcela:
         return None, "Parcela no encontrada"
@@ -136,11 +136,7 @@ def desasignar_sensor(db: Session, parcela_id: int, sensor_id: int) -> bool:
 
 
 # ── Historial de cultivos ─────────────────────────────
-def agregar_historial(
-    db: Session,
-    parcela_id: int,
-    data: HistorialCultivoEntrada
-) -> tuple:
+def agregar_historial(db: Session, parcela_id: int, data: HistorialCultivoEntrada) -> tuple:
     parcela = db.query(Parcela).filter(Parcela.id == parcela_id).first()
     if not parcela:
         return None, "Parcela no encontrada"
@@ -149,14 +145,10 @@ def agregar_historial(
     if not tipo:
         return None, "Tipo de cultivo no encontrado"
 
-    historial = HistorialCultivo(
-        parcela_id=parcela_id,
-        **data.model_dump()
-    )
+    historial = HistorialCultivo(parcela_id=parcela_id, **data.model_dump())
     db.add(historial)
     db.commit()
     db.refresh(historial)
-    # Enriquecer con nombre del tipo de cultivo
     historial.tipo_cultivo_nombre = tipo.nombre
     return historial, None
 
@@ -173,11 +165,7 @@ def listar_historial(db: Session, parcela_id: int) -> list:
     return registros
 
 
-def actualizar_historial(
-    db: Session,
-    historial_id: int,
-    data: dict
-) -> HistorialCultivo:
+def actualizar_historial(db: Session, historial_id: int, data: dict) -> HistorialCultivo:
     h = db.query(HistorialCultivo).options(
         joinedload(HistorialCultivo.tipo_cultivo)
     ).filter(HistorialCultivo.id == historial_id).first()
@@ -207,11 +195,14 @@ def crear_tipo_cultivo(db: Session, data) -> TipoCultivo:
 
 
 # ── Resumen de parcelas ───────────────────────────────
-def resumen_parcelas(db: Session) -> list:
-    parcelas = db.query(Parcela).options(
+def resumen_parcelas(db: Session, usuario_id: int = None) -> list:
+    query = db.query(Parcela).options(
         joinedload(Parcela.sensores),
         joinedload(Parcela.historial).joinedload(HistorialCultivo.tipo_cultivo)
-    ).all()
+    )
+    if usuario_id:
+        query = query.filter(Parcela.usuario_id == usuario_id)
+    parcelas = query.all()
     resultado = []
     for p in parcelas:
         sensores_activos = sum(1 for s in p.sensores if s.activo)

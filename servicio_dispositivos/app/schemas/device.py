@@ -35,8 +35,7 @@ class RespuestaTipoDispositivo(BaseModel):
     tipo_pin:            Optional[str]
     metricas_permitidas: List[str]
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 # ── Configuracion del sensor ──────────────────────────
@@ -50,8 +49,7 @@ class RespuestaConfiguracion(BaseModel):
     parcela_nombre:        Optional[str]
     posicion_campo:        Optional[str]
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 # ── Crear dispositivo ─────────────────────────────────
@@ -61,11 +59,9 @@ class CrearDispositivo(BaseModel):
     numero_serial:       str  = Field(..., min_length=3, max_length=100)
     version_firmware:    Optional[str] = Field(None, max_length=50)
     estado:              EstadoDispositivo = EstadoDispositivo.activo
-    # Parcela asignada al registrar
     parcela_id:          Optional[int]   = None
     parcela_nombre:      Optional[str]   = None
     posicion_campo:      Optional[str]   = None
-    # Limites personalizados
     limite_minimo:       Optional[float] = None
     limite_maximo:       Optional[float] = None
 
@@ -77,10 +73,8 @@ class ActualizarDispositivo(BaseModel):
     intervalo_muestreo:    Optional[int]                = Field(None, ge=10, le=86400)
     protocolo_transmision: Optional[Protocolo]          = None
     umbral_bateria:        Optional[int]                = Field(None, ge=0, le=100)
-    # Limites personalizados
     limite_minimo:         Optional[float]              = None
     limite_maximo:         Optional[float]              = None
-    # Parcela asignada
     parcela_id:            Optional[int]                = None
     parcela_nombre:        Optional[str]                = None
     posicion_campo:        Optional[str]                = None
@@ -98,6 +92,7 @@ class ActualizarDispositivo(BaseModel):
 # ── Respuesta dispositivo ─────────────────────────────
 class RespuestaDispositivo(BaseModel):
     id:                  int
+    usuario_id:          Optional[int]
     tipo_dispositivo_id: int
     id_logico:           str
     numero_serial:       str
@@ -107,8 +102,7 @@ class RespuestaDispositivo(BaseModel):
     ultima_conexion:     Optional[datetime]
     configuracion:       Optional[RespuestaConfiguracion] = None
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 # ── Metricas ──────────────────────────────────────────
@@ -121,8 +115,7 @@ class RespuestaMetricasDispositivo(BaseModel):
     limite_minimo:       Optional[float] = None
     limite_maximo:       Optional[float] = None
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 # ── Despliegues ───────────────────────────────────────
@@ -149,5 +142,4 @@ class RespuestaDespliegue(BaseModel):
     motivo_retiro:   Optional[str]
     reemplazado_por: Optional[int]
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}

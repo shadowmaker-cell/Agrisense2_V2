@@ -20,13 +20,10 @@ class LoteIngesta(Base):
 
 
 class LecturaSensor(Base):
-    """
-    Tabla principal de lecturas de sensores.
-    Optimizada para TimescaleDB como hypertable por timestamp.
-    """
     __tablename__ = "lectura_sensor"
 
     id                = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    usuario_id        = Column(Integer, nullable=True, index=True)
     dispositivo_id    = Column(Integer, nullable=False, index=True)
     id_logico         = Column(String(50), nullable=False, index=True)
     tipo_metrica      = Column(String(50), nullable=False)
@@ -50,10 +47,10 @@ class ErrorIngesta(Base):
 
 
 class AlertaGenerada(Base):
-    """Alertas detectadas automáticamente durante la ingesta."""
     __tablename__ = "alerta_generada"
 
     id              = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    usuario_id      = Column(Integer, nullable=True, index=True)
     dispositivo_id  = Column(Integer, nullable=False, index=True)
     id_logico       = Column(String(50), nullable=False)
     tipo_metrica    = Column(String(50), nullable=False)

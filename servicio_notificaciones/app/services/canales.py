@@ -17,9 +17,9 @@ def crear_notificacion(
     condicion: str,
     severidad: str,
     canal: str = "sistema",
-    origen_evento: str = "alert.generated"
+    origen_evento: str = "alert.generated",
+    usuario_id: int = None,
 ) -> Notificacion:
-    """Crea y persiste una notificación en la base de datos."""
     contenido = formatear_notificacion(
         tipo_alerta=tipo_alerta,
         id_logico=id_logico,
@@ -28,8 +28,8 @@ def crear_notificacion(
         condicion=condicion,
         severidad=severidad
     )
-
     notificacion = Notificacion(
+        usuario_id=usuario_id,
         dispositivo_id=dispositivo_id,
         id_logico=id_logico,
         titulo=contenido["titulo"],
@@ -45,52 +45,28 @@ def crear_notificacion(
     return notificacion
 
 
-def enviar_notificacion(
-    db: Session,
-    notificacion: Notificacion
-) -> bool:
-    """
-    Simula el envío de la notificación por el canal configurado.
-    En producción aquí iría la integración con FCM, Twilio, SendGrid, etc.
-    """
+def enviar_notificacion(db: Session, notificacion: Notificacion) -> bool:
     contenido_canal = formatear_para_canal(
         titulo=notificacion.titulo,
         mensaje=notificacion.mensaje,
         canal=notificacion.canal
     )
-
-    # Simula el envío según el canal
     try:
         if notificacion.canal == "sistema":
-            logger.info(
-                f"[SISTEMA] {contenido_canal['titulo']}\n"
-                f"{contenido_canal['mensaje']}"
-            )
-            respuesta = "Notificación registrada en sistema"
-
+            logger.info(f"[SISTEMA] {contenido_canal['titulo']}\n{contenido_canal['mensaje']}")
+            respuesta = "Notificacion registrada en sistema"
         elif notificacion.canal == "email":
-            logger.info(
-                f"[EMAIL] Enviando a usuario {notificacion.usuario_id}: "
-                f"{contenido_canal['titulo']}"
-            )
+            logger.info(f"[EMAIL] Enviando a usuario {notificacion.usuario_id}: {contenido_canal['titulo']}")
             respuesta = "Email simulado enviado"
-
         elif notificacion.canal == "sms":
-            logger.info(
-                f"[SMS] Enviando SMS: {contenido_canal['mensaje']}"
-            )
+            logger.info(f"[SMS] Enviando SMS: {contenido_canal['mensaje']}")
             respuesta = "SMS simulado enviado"
-
         elif notificacion.canal == "push":
-            logger.info(
-                f"[PUSH] Enviando push: {contenido_canal['titulo']}"
-            )
+            logger.info(f"[PUSH] Enviando push: {contenido_canal['titulo']}")
             respuesta = "Push notification simulada enviada"
-
         else:
             respuesta = f"Canal {notificacion.canal} no soportado"
 
-        # Registra envío exitoso
         log = LogEnvio(
             notificacion_id=notificacion.id,
             canal=notificacion.canal,
@@ -98,19 +74,12 @@ def enviar_notificacion(
             respuesta=respuesta
         )
         db.add(log)
-
-        notificacion.estado = "enviada"
+        notificacion.estado    = "enviada"
         notificacion.enviada_en = datetime.now(timezone.utc)
         db.commit()
-
-        logger.info(
-            f"Notificación {notificacion.id} enviada — "
-            f"[{notificacion.severidad.upper()}] {notificacion.id_logico}"
-        )
         return True
 
     except Exception as e:
-        # Registra fallo
         log = LogEnvio(
             notificacion_id=notificacion.id,
             canal=notificacion.canal,
@@ -120,31 +89,21 @@ def enviar_notificacion(
         db.add(log)
         notificacion.estado = "fallida"
         db.commit()
-        logger.error(f"Error enviando notificación {notificacion.id}: {e}")
+        logger.error(f"Error enviando notificacion {notificacion.id}: {e}")
         return False
 
 
-def procesar_alerta(
-    db: Session,
-    datos: dict
-) -> dict:
-    """
-    Procesa una alerta y genera la notificación correspondiente.
-    Determina el canal según la severidad.
-    """
-    severidad = datos.get("severidad", "media")
+def procesar_alerta(db: Session, datos: dict) -> dict:
+    severidad  = datos.get("severidad", "media")
+    usuario_id = datos.get("usuario_id")
 
-    # Canal según severidad
     canal = "sistema"
     if severidad == "critica":
         canal = "push"
-    elif severidad == "alta":
-        canal = "sistema"
-    elif severidad == "media":
-        canal = "sistema"
 
     notificacion = crear_notificacion(
         db=db,
+        usuario_id=usuario_id,
         dispositivo_id=datos.get("dispositivo_id"),
         id_logico=datos.get("id_logico"),
         tipo_alerta=datos.get("tipo_alerta", datos.get("tipo_metrica")),

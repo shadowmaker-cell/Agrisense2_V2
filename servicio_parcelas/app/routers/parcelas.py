@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.database import get_db
@@ -15,6 +15,7 @@ from app.services.parcela_service import (
     agregar_historial, listar_historial, actualizar_historial,
     listar_tipos_cultivo, crear_tipo_cultivo, resumen_parcelas,
 )
+from app.utils.jwt import get_usuario_id, get_usuario_id_opcional
 
 router = APIRouter(prefix="/api/v1/parcelas", tags=["parcelas"])
 
@@ -25,67 +26,80 @@ def health():
     return {"estado": "ok", "servicio": "parcel-management", "version": "1.0.0"}
 
 
-# ── Tipos de cultivo ──────────────────────────────────
+# ── Tipos de cultivo (globales) ───────────────────────
 @router.get("/tipos-cultivo", response_model=List[TipoCultivoRespuesta])
 def get_tipos_cultivo(db: Session = Depends(get_db)):
-    """Lista todos los tipos de cultivo disponibles."""
     return listar_tipos_cultivo(db)
 
 
 @router.post("/tipos-cultivo", response_model=TipoCultivoRespuesta, status_code=201)
 def post_tipo_cultivo(payload: TipoCultivoEntrada, db: Session = Depends(get_db)):
-    """Crea un nuevo tipo de cultivo."""
     return crear_tipo_cultivo(db, payload)
 
 
-# ── Parcelas CRUD ─────────────────────────────────────
+# ── Resumen ───────────────────────────────────────────
 @router.get("/resumen", response_model=List[ParcelaResumen])
-def get_resumen(db: Session = Depends(get_db)):
-    """Resumen de todas las parcelas con sensores activos y cultivo actual."""
-    return resumen_parcelas(db)
+def get_resumen(request: Request, db: Session = Depends(get_db)):
+    usuario_id = get_usuario_id(request)
+    return resumen_parcelas(db, usuario_id)
 
 
+# ── Parcelas CRUD ─────────────────────────────────────
 @router.get("/", response_model=List[ParcelaRespuesta])
 def get_parcelas(
+    request: Request,
     estado: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """Lista todas las parcelas con sus sensores e historial."""
-    return listar_parcelas(db, estado)
+    usuario_id = get_usuario_id(request)
+    return listar_parcelas(db, estado, usuario_id)
 
 
 @router.get("/{parcela_id}", response_model=ParcelaRespuesta)
-def get_parcela(parcela_id: int, db: Session = Depends(get_db)):
-    """Obtiene una parcela por ID con todos sus datos."""
-    parcela = obtener_parcela(db, parcela_id)
+def get_parcela(
+    parcela_id: int,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    usuario_id = get_usuario_id(request)
+    parcela = obtener_parcela(db, parcela_id, usuario_id)
     if not parcela:
         raise HTTPException(status_code=404, detail="Parcela no encontrada")
     return parcela
 
 
 @router.post("/", response_model=ParcelaRespuesta, status_code=201)
-def post_parcela(payload: ParcelaEntrada, db: Session = Depends(get_db)):
-    """Crea una nueva parcela."""
-    return crear_parcela(db, payload)
+def post_parcela(
+    payload: ParcelaEntrada,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    usuario_id = get_usuario_id(request)
+    return crear_parcela(db, payload, usuario_id)
 
 
 @router.put("/{parcela_id}", response_model=ParcelaRespuesta)
 def put_parcela(
     parcela_id: int,
     payload: ParcelaEntrada,
+    request: Request,
     db: Session = Depends(get_db)
 ):
-    """Actualiza los datos de una parcela."""
-    parcela = actualizar_parcela(db, parcela_id, payload.model_dump())
+    usuario_id = get_usuario_id(request)
+    parcela = actualizar_parcela(db, parcela_id, payload.model_dump(), usuario_id)
     if not parcela:
         raise HTTPException(status_code=404, detail="Parcela no encontrada")
     return parcela
 
 
 @router.delete("/{parcela_id}")
-def delete_parcela(parcela_id: int, db: Session = Depends(get_db)):
-    """Elimina una parcela y todos sus datos asociados."""
-    ok = eliminar_parcela(db, parcela_id)
+def delete_parcela(
+    parcela_id: int,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    usuario_id = get_usuario_id(request)
+    ok = eliminar_parcela(db, parcela_id, usuario_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Parcela no encontrada")
     return {"mensaje": "Parcela eliminada exitosamente"}
@@ -93,8 +107,15 @@ def delete_parcela(parcela_id: int, db: Session = Depends(get_db)):
 
 # ── Sensores de parcela ───────────────────────────────
 @router.get("/{parcela_id}/sensores", response_model=List[ParcelaSensorRespuesta])
-def get_sensores_parcela(parcela_id: int, db: Session = Depends(get_db)):
-    """Lista los sensores asignados a una parcela."""
+def get_sensores_parcela(
+    parcela_id: int,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    usuario_id = get_usuario_id(request)
+    parcela = obtener_parcela(db, parcela_id, usuario_id)
+    if not parcela:
+        raise HTTPException(status_code=404, detail="Parcela no encontrada")
     return listar_sensores_parcela(db, parcela_id)
 
 
@@ -102,9 +123,13 @@ def get_sensores_parcela(parcela_id: int, db: Session = Depends(get_db)):
 def post_asignar_sensor(
     parcela_id: int,
     payload: ParcelaSensorEntrada,
+    request: Request,
     db: Session = Depends(get_db)
 ):
-    """Asigna un sensor IoT a una parcela."""
+    usuario_id = get_usuario_id(request)
+    parcela = obtener_parcela(db, parcela_id, usuario_id)
+    if not parcela:
+        raise HTTPException(status_code=404, detail="Parcela no encontrada")
     sensor, error = asignar_sensor(db, parcela_id, payload)
     if error:
         raise HTTPException(status_code=400, detail=error)
@@ -115,9 +140,13 @@ def post_asignar_sensor(
 def delete_sensor_parcela(
     parcela_id: int,
     sensor_id: int,
+    request: Request,
     db: Session = Depends(get_db)
 ):
-    """Desasigna un sensor de una parcela."""
+    usuario_id = get_usuario_id(request)
+    parcela = obtener_parcela(db, parcela_id, usuario_id)
+    if not parcela:
+        raise HTTPException(status_code=404, detail="Parcela no encontrada")
     ok = desasignar_sensor(db, parcela_id, sensor_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Asignacion no encontrada")
@@ -126,8 +155,15 @@ def delete_sensor_parcela(
 
 # ── Historial de cultivos ─────────────────────────────
 @router.get("/{parcela_id}/historial", response_model=List[HistorialCultivoRespuesta])
-def get_historial(parcela_id: int, db: Session = Depends(get_db)):
-    """Lista el historial de cultivos de una parcela."""
+def get_historial(
+    parcela_id: int,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    usuario_id = get_usuario_id(request)
+    parcela = obtener_parcela(db, parcela_id, usuario_id)
+    if not parcela:
+        raise HTTPException(status_code=404, detail="Parcela no encontrada")
     return listar_historial(db, parcela_id)
 
 
@@ -135,9 +171,13 @@ def get_historial(parcela_id: int, db: Session = Depends(get_db)):
 def post_historial(
     parcela_id: int,
     payload: HistorialCultivoEntrada,
+    request: Request,
     db: Session = Depends(get_db)
 ):
-    """Agrega un registro al historial de cultivos."""
+    usuario_id = get_usuario_id(request)
+    parcela = obtener_parcela(db, parcela_id, usuario_id)
+    if not parcela:
+        raise HTTPException(status_code=404, detail="Parcela no encontrada")
     historial, error = agregar_historial(db, parcela_id, payload)
     if error:
         raise HTTPException(status_code=400, detail=error)
@@ -149,9 +189,13 @@ def put_historial(
     parcela_id: int,
     historial_id: int,
     payload: HistorialCultivoEntrada,
+    request: Request,
     db: Session = Depends(get_db)
 ):
-    """Actualiza un registro del historial de cultivos."""
+    usuario_id = get_usuario_id(request)
+    parcela = obtener_parcela(db, parcela_id, usuario_id)
+    if not parcela:
+        raise HTTPException(status_code=404, detail="Parcela no encontrada")
     historial = actualizar_historial(db, historial_id, payload.model_dump())
     if not historial:
         raise HTTPException(status_code=404, detail="Historial no encontrado")

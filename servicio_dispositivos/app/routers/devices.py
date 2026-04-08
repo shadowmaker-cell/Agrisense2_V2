@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime, timezone
@@ -15,6 +15,7 @@ from app.schemas.device import (
     RetirarDespliegue, RespuestaDespliegue,
 )
 from app.events.producer import publicar_dispositivo_creado, publicar_dispositivo_actualizado
+from app.utils.jwt import get_usuario_id, get_usuario_id_opcional
 
 router = APIRouter(prefix="/api/v1/dispositivos", tags=["Dispositivos"])
 
@@ -25,7 +26,7 @@ def health():
     return {"estado": "ok", "servicio": "device-management", "version": "1.0.0"}
 
 
-# ── Tipos de sensor ───────────────────────────────────
+# ── Tipos de sensor (globales, sin filtro usuario) ────
 @router.get("/tipos", response_model=List[RespuestaTipoDispositivo])
 def listar_tipos(db: Session = Depends(get_db)):
     return db.query(TipoDispositivo).all()
@@ -41,8 +42,14 @@ def obtener_tipo(tipo_id: int, db: Session = Depends(get_db)):
 
 # ── Dispositivos ──────────────────────────────────────
 @router.post("/", response_model=RespuestaDispositivo, status_code=201)
-def registrar_dispositivo(payload: CrearDispositivo, db: Session = Depends(get_db)):
-    """Registra un nuevo sensor. Permite asignar parcela y limites al crearlo."""
+def registrar_dispositivo(
+    payload: CrearDispositivo,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Registra un nuevo sensor asignado al usuario autenticado."""
+    usuario_id = get_usuario_id(request)
+
     tipo = db.query(TipoDispositivo).filter(
         TipoDispositivo.id == payload.tipo_dispositivo_id
     ).first()
@@ -60,6 +67,7 @@ def registrar_dispositivo(payload: CrearDispositivo, db: Session = Depends(get_d
         raise HTTPException(status_code=400, detail="El ID logico ya esta en uso")
 
     dispositivo = Dispositivo(
+        usuario_id=usuario_id,
         tipo_dispositivo_id=payload.tipo_dispositivo_id,
         id_logico=payload.id_logico,
         numero_serial=payload.numero_serial,
@@ -88,21 +96,32 @@ def registrar_dispositivo(payload: CrearDispositivo, db: Session = Depends(get_d
 
 @router.get("/", response_model=List[RespuestaDispositivo])
 def listar_dispositivos(
+    request: Request,
     skip:   int           = 0,
     limit:  int           = 100,
     estado: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    consulta = db.query(Dispositivo)
+    """Lista sensores del usuario autenticado."""
+    usuario_id = get_usuario_id(request)
+    consulta = db.query(Dispositivo).filter(
+        Dispositivo.usuario_id == usuario_id
+    )
     if estado:
         consulta = consulta.filter(Dispositivo.estado == estado)
     return consulta.offset(skip).limit(limit).all()
 
 
 @router.get("/{dispositivo_id}", response_model=RespuestaDispositivo)
-def obtener_dispositivo(dispositivo_id: int, db: Session = Depends(get_db)):
+def obtener_dispositivo(
+    dispositivo_id: int,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    usuario_id = get_usuario_id(request)
     dispositivo = db.query(Dispositivo).filter(
-        Dispositivo.id == dispositivo_id
+        Dispositivo.id == dispositivo_id,
+        Dispositivo.usuario_id == usuario_id
     ).first()
     if not dispositivo:
         raise HTTPException(status_code=404, detail="Sensor no encontrado")
@@ -113,11 +132,13 @@ def obtener_dispositivo(dispositivo_id: int, db: Session = Depends(get_db)):
 def actualizar_dispositivo(
     dispositivo_id: int,
     payload: ActualizarDispositivo,
+    request: Request,
     db: Session = Depends(get_db)
 ):
-    """Actualiza estado, configuracion, limites y parcela asignada."""
+    usuario_id = get_usuario_id(request)
     dispositivo = db.query(Dispositivo).filter(
-        Dispositivo.id == dispositivo_id
+        Dispositivo.id == dispositivo_id,
+        Dispositivo.usuario_id == usuario_id
     ).first()
     if not dispositivo:
         raise HTTPException(status_code=404, detail="Sensor no encontrado")
@@ -151,10 +172,16 @@ def actualizar_dispositivo(
 
 
 @router.get("/{dispositivo_id}/metricas", response_model=RespuestaMetricasDispositivo)
-def obtener_metricas_dispositivo(dispositivo_id: int, db: Session = Depends(get_db)):
-    dispositivo = db.query(Dispositivo).filter(
-        Dispositivo.id == dispositivo_id
-    ).first()
+def obtener_metricas_dispositivo(
+    dispositivo_id: int,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    usuario_id = get_usuario_id_opcional(request)
+    query = db.query(Dispositivo).filter(Dispositivo.id == dispositivo_id)
+    if usuario_id:
+        query = query.filter(Dispositivo.usuario_id == usuario_id)
+    dispositivo = query.first()
     if not dispositivo:
         raise HTTPException(status_code=404, detail="Sensor no encontrado")
 
@@ -175,15 +202,17 @@ def obtener_metricas_dispositivo(dispositivo_id: int, db: Session = Depends(get_
     )
 
 
-# ── Hoja de vida del sensor ───────────────────────────
+# ── Hoja de vida ──────────────────────────────────────
 @router.get("/{dispositivo_id}/hoja-de-vida")
-def hoja_de_vida(dispositivo_id: int, db: Session = Depends(get_db)):
-    """
-    Retorna la hoja de vida completa del sensor:
-    datos basicos, configuracion, historial de estados y despliegues.
-    """
+def hoja_de_vida(
+    dispositivo_id: int,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    usuario_id = get_usuario_id(request)
     dispositivo = db.query(Dispositivo).filter(
-        Dispositivo.id == dispositivo_id
+        Dispositivo.id == dispositivo_id,
+        Dispositivo.usuario_id == usuario_id
     ).first()
     if not dispositivo:
         raise HTTPException(status_code=404, detail="Sensor no encontrado")
@@ -246,10 +275,13 @@ def hoja_de_vida(dispositivo_id: int, db: Session = Depends(get_db)):
 def crear_despliegue(
     dispositivo_id: int,
     payload: CrearDespliegue,
+    request: Request,
     db: Session = Depends(get_db)
 ):
+    usuario_id = get_usuario_id(request)
     dispositivo = db.query(Dispositivo).filter(
-        Dispositivo.id == dispositivo_id
+        Dispositivo.id == dispositivo_id,
+        Dispositivo.usuario_id == usuario_id
     ).first()
     if not dispositivo:
         raise HTTPException(status_code=404, detail="Sensor no encontrado")
@@ -279,9 +311,15 @@ def crear_despliegue(
 
 @router.get("/{dispositivo_id}/despliegues",
             response_model=List[RespuestaDespliegue])
-def historial_despliegues(dispositivo_id: int, db: Session = Depends(get_db)):
+def historial_despliegues(
+    dispositivo_id: int,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    usuario_id = get_usuario_id(request)
     dispositivo = db.query(Dispositivo).filter(
-        Dispositivo.id == dispositivo_id
+        Dispositivo.id == dispositivo_id,
+        Dispositivo.usuario_id == usuario_id
     ).first()
     if not dispositivo:
         raise HTTPException(status_code=404, detail="Sensor no encontrado")
@@ -295,8 +333,17 @@ def historial_despliegues(dispositivo_id: int, db: Session = Depends(get_db)):
 def retirar_sensor(
     dispositivo_id: int,
     payload: RetirarDespliegue,
+    request: Request,
     db: Session = Depends(get_db)
 ):
+    usuario_id = get_usuario_id(request)
+    dispositivo = db.query(Dispositivo).filter(
+        Dispositivo.id == dispositivo_id,
+        Dispositivo.usuario_id == usuario_id
+    ).first()
+    if not dispositivo:
+        raise HTTPException(status_code=404, detail="Sensor no encontrado")
+
     despliegue = db.query(DespliegueDispositivo).filter(
         DespliegueDispositivo.dispositivo_id == dispositivo_id,
         DespliegueDispositivo.estado == "activo"
@@ -311,7 +358,8 @@ def retirar_sensor(
 
     if payload.reemplazado_por:
         reemplazo = db.query(Dispositivo).filter(
-            Dispositivo.id == payload.reemplazado_por
+            Dispositivo.id == payload.reemplazado_por,
+            Dispositivo.usuario_id == usuario_id
         ).first()
         if not reemplazo:
             raise HTTPException(status_code=404, detail="Sensor de reemplazo no existe")

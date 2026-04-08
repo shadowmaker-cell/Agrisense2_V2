@@ -12,16 +12,17 @@ def guardar_alerta(
     tipo_metrica: str,
     valor_detectado: float,
     condicion: str,
-    severidad: str
+    severidad: str,
+    usuario_id: int = None,
 ) -> AlertaGenerada:
-    """Persiste una alerta detectada en la base de datos."""
     alerta = AlertaGenerada(
+        usuario_id=usuario_id,
         dispositivo_id=dispositivo_id,
         id_logico=id_logico,
         tipo_metrica=tipo_metrica,
         valor_detectado=valor_detectado,
         condicion=condicion,
-        severidad=severidad
+        severidad=severidad,
     )
     db.add(alerta)
     db.flush()
@@ -38,12 +39,9 @@ def procesar_alertas(
     id_logico: str,
     tipo_metrica: str,
     valor: float,
-    alertas_detectadas: list
+    alertas_detectadas: list,
+    usuario_id: int = None,
 ) -> list:
-    """
-    Guarda todas las alertas detectadas para una lectura.
-    Retorna lista de alertas guardadas.
-    """
     guardadas = []
     for condicion, severidad in alertas_detectadas:
         alerta = guardar_alerta(
@@ -53,7 +51,8 @@ def procesar_alertas(
             tipo_metrica=tipo_metrica,
             valor_detectado=valor,
             condicion=condicion,
-            severidad=severidad
+            severidad=severidad,
+            usuario_id=usuario_id,
         )
         guardadas.append(alerta)
     return guardadas

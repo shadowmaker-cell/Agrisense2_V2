@@ -5,16 +5,14 @@ from app.models.prediccion import (
 )
 from app.ml.modelos import predecir_agua, predecir_rendimiento, predecir_riesgo
 
-
-# ── Modelos registrados por defecto ──────────────────
 MODELOS_DEFAULT = [
     {
         "nombre":          "AgriSense Water Predictor",
         "version":         "1.0.0",
         "tipo":            "agua",
-        "descripcion":     "Predice los litros de agua necesarios por parcela segun condiciones del suelo y clima",
+        "descripcion":     "Predice los litros de agua necesarios por parcela",
         "variable_target": "litros_recomendados",
-        "features":        ["humedad_suelo", "temperatura_aire", "lluvia", "area_hectareas", "tipo_cultivo"],
+        "features":        ["humedad_suelo","temperatura_aire","lluvia","area_hectareas","tipo_cultivo"],
         "metricas":        {"mae": 12.3, "rmse": 18.7, "r2": 0.87},
         "estado":          "activo",
     },
@@ -22,9 +20,9 @@ MODELOS_DEFAULT = [
         "nombre":          "AgriSense Yield Predictor",
         "version":         "1.0.0",
         "tipo":            "rendimiento",
-        "descripcion":     "Predice el rendimiento esperado en kg/ha segun variables agronomicas",
+        "descripcion":     "Predice el rendimiento esperado en kg/ha",
         "variable_target": "rendimiento_kg_ha",
-        "features":        ["area_hectareas", "humedad_suelo", "temperatura_aire", "ph_suelo", "lluvia_acumulada"],
+        "features":        ["area_hectareas","humedad_suelo","temperatura_aire","ph_suelo","lluvia_acumulada"],
         "metricas":        {"mae": 320.5, "rmse": 480.2, "r2": 0.82},
         "estado":          "activo",
     },
@@ -32,9 +30,9 @@ MODELOS_DEFAULT = [
         "nombre":          "AgriSense Risk Classifier",
         "version":         "1.0.0",
         "tipo":            "riesgo",
-        "descripcion":     "Clasifica el nivel de riesgo agronomico: helada, sequia, hongo, inundacion",
+        "descripcion":     "Clasifica el nivel de riesgo agronomico",
         "variable_target": "nivel_riesgo",
-        "features":        ["temperatura_aire", "humedad_aire", "humedad_suelo", "velocidad_viento", "lluvia"],
+        "features":        ["temperatura_aire","humedad_aire","humedad_suelo","velocidad_viento","lluvia"],
         "metricas":        {"accuracy": 0.89, "f1_score": 0.86},
         "estado":          "activo",
     },
@@ -42,9 +40,7 @@ MODELOS_DEFAULT = [
 
 
 def inicializar_modelos(db: Session):
-    """Registra los modelos en la BD si no existen."""
-    existentes = db.query(ModeloRegistro).count()
-    if existentes > 0:
+    if db.query(ModeloRegistro).count() > 0:
         return
     for m in MODELOS_DEFAULT:
         db.add(ModeloRegistro(**m))
@@ -59,8 +55,10 @@ def obtener_modelo(db: Session, modelo_id: int) -> ModeloRegistro:
     return db.query(ModeloRegistro).filter(ModeloRegistro.id == modelo_id).first()
 
 
-def _crear_solicitud(db: Session, modelo_id: int, tipo: str, datos: dict, parcela_id=None, id_logico=None) -> SolicitudPrediccion:
+def _crear_solicitud(db: Session, modelo_id: int, tipo: str, datos: dict,
+                     parcela_id=None, id_logico=None, usuario_id=None) -> SolicitudPrediccion:
     solicitud = SolicitudPrediccion(
+        usuario_id=usuario_id,
         modelo_id=modelo_id,
         parcela_id=parcela_id,
         id_logico=id_logico,
@@ -87,8 +85,7 @@ def _guardar_resultado(db: Session, solicitud_id: int, valor: float, confianza: 
     return resultado
 
 
-# ── Prediccion de agua ────────────────────────────────
-def ejecutar_prediccion_agua(db: Session, data: dict) -> dict:
+def ejecutar_prediccion_agua(db: Session, data: dict, usuario_id: int = None) -> dict:
     modelo = db.query(ModeloRegistro).filter(
         ModeloRegistro.tipo == "agua", ModeloRegistro.estado == "activo"
     ).first()
@@ -96,15 +93,13 @@ def ejecutar_prediccion_agua(db: Session, data: dict) -> dict:
         raise ValueError("Modelo de agua no disponible")
 
     solicitud = _crear_solicitud(
-        db, modelo.id, "agua",
-        data,
+        db, modelo.id, "agua", data,
         parcela_id=data.get("parcela_id"),
         id_logico=data.get("id_logico"),
+        usuario_id=usuario_id,
     )
-
     resultado_ml = predecir_agua(data)
-
-    resultado = _guardar_resultado(
+    _guardar_resultado(
         db, solicitud.id,
         valor=resultado_ml["litros_recomendados"],
         confianza=resultado_ml["confianza"],
@@ -112,15 +107,12 @@ def ejecutar_prediccion_agua(db: Session, data: dict) -> dict:
         explicacion=resultado_ml["explicacion"],
         datos_salida=resultado_ml,
     )
-
     solicitud.estado = "completado"
     db.commit()
-
     return {**resultado_ml, "solicitud_id": solicitud.id}
 
 
-# ── Prediccion de rendimiento ─────────────────────────
-def ejecutar_prediccion_rendimiento(db: Session, data: dict) -> dict:
+def ejecutar_prediccion_rendimiento(db: Session, data: dict, usuario_id: int = None) -> dict:
     modelo = db.query(ModeloRegistro).filter(
         ModeloRegistro.tipo == "rendimiento", ModeloRegistro.estado == "activo"
     ).first()
@@ -128,15 +120,13 @@ def ejecutar_prediccion_rendimiento(db: Session, data: dict) -> dict:
         raise ValueError("Modelo de rendimiento no disponible")
 
     solicitud = _crear_solicitud(
-        db, modelo.id, "rendimiento",
-        data,
+        db, modelo.id, "rendimiento", data,
         parcela_id=data.get("parcela_id"),
         id_logico=data.get("id_logico"),
+        usuario_id=usuario_id,
     )
-
     resultado_ml = predecir_rendimiento(data)
-
-    resultado = _guardar_resultado(
+    _guardar_resultado(
         db, solicitud.id,
         valor=resultado_ml["rendimiento_kg_ha"],
         confianza=resultado_ml["confianza"],
@@ -144,15 +134,12 @@ def ejecutar_prediccion_rendimiento(db: Session, data: dict) -> dict:
         explicacion=f"Calificacion: {resultado_ml['calificacion']}",
         datos_salida=resultado_ml,
     )
-
     solicitud.estado = "completado"
     db.commit()
-
     return {**resultado_ml, "solicitud_id": solicitud.id}
 
 
-# ── Prediccion de riesgo ──────────────────────────────
-def ejecutar_prediccion_riesgo(db: Session, data: dict) -> dict:
+def ejecutar_prediccion_riesgo(db: Session, data: dict, usuario_id: int = None) -> dict:
     modelo = db.query(ModeloRegistro).filter(
         ModeloRegistro.tipo == "riesgo", ModeloRegistro.estado == "activo"
     ).first()
@@ -160,15 +147,13 @@ def ejecutar_prediccion_riesgo(db: Session, data: dict) -> dict:
         raise ValueError("Modelo de riesgo no disponible")
 
     solicitud = _crear_solicitud(
-        db, modelo.id, "riesgo",
-        data,
+        db, modelo.id, "riesgo", data,
         parcela_id=data.get("parcela_id"),
         id_logico=data.get("id_logico"),
+        usuario_id=usuario_id,
     )
-
     resultado_ml = predecir_riesgo(data)
-
-    resultado = _guardar_resultado(
+    _guardar_resultado(
         db, solicitud.id,
         valor=resultado_ml["probabilidad"],
         confianza=resultado_ml["confianza"],
@@ -176,16 +161,16 @@ def ejecutar_prediccion_riesgo(db: Session, data: dict) -> dict:
         explicacion=f"Riesgo {resultado_ml['tipo_riesgo']}: nivel {resultado_ml['nivel']}",
         datos_salida=resultado_ml,
     )
-
     solicitud.estado = "completado"
     db.commit()
-
     return {**resultado_ml, "solicitud_id": solicitud.id}
 
 
-# ── Historial y resumen ───────────────────────────────
-def listar_predicciones(db: Session, tipo: str = None, limite: int = 50) -> list:
+def listar_predicciones(db: Session, tipo: str = None, limite: int = 50,
+                        usuario_id: int = None) -> list:
     query = db.query(SolicitudPrediccion)
+    if usuario_id:
+        query = query.filter(SolicitudPrediccion.usuario_id == usuario_id)
     if tipo:
         query = query.filter(SolicitudPrediccion.tipo_prediccion == tipo)
     return query.order_by(SolicitudPrediccion.solicitado_en.desc()).limit(limite).all()
@@ -197,21 +182,16 @@ def obtener_resultado(db: Session, solicitud_id: int) -> ResultadoPrediccion:
     ).first()
 
 
-def resumen_ml(db: Session) -> dict:
-    total         = db.query(SolicitudPrediccion).count()
-    agua          = db.query(SolicitudPrediccion).filter(SolicitudPrediccion.tipo_prediccion == "agua").count()
-    riesgo        = db.query(SolicitudPrediccion).filter(SolicitudPrediccion.tipo_prediccion == "riesgo").count()
-    rendimiento   = db.query(SolicitudPrediccion).filter(SolicitudPrediccion.tipo_prediccion == "rendimiento").count()
-    modelos       = db.query(ModeloRegistro).filter(ModeloRegistro.estado == "activo").count()
-    ultima        = db.query(SolicitudPrediccion).order_by(
-        SolicitudPrediccion.solicitado_en.desc()
-    ).first()
-
+def resumen_ml(db: Session, usuario_id: int = None) -> dict:
+    q = db.query(SolicitudPrediccion)
+    if usuario_id:
+        q = q.filter(SolicitudPrediccion.usuario_id == usuario_id)
+    ultima = q.order_by(SolicitudPrediccion.solicitado_en.desc()).first()
     return {
-        "total_predicciones":        total,
-        "predicciones_agua":         agua,
-        "predicciones_riesgo":       riesgo,
-        "predicciones_rendimiento":  rendimiento,
-        "modelos_activos":           modelos,
+        "total_predicciones":        q.count(),
+        "predicciones_agua":         q.filter(SolicitudPrediccion.tipo_prediccion == "agua").count(),
+        "predicciones_riesgo":       q.filter(SolicitudPrediccion.tipo_prediccion == "riesgo").count(),
+        "predicciones_rendimiento":  q.filter(SolicitudPrediccion.tipo_prediccion == "rendimiento").count(),
+        "modelos_activos":           db.query(ModeloRegistro).filter(ModeloRegistro.estado == "activo").count(),
         "ultima_prediccion":         ultima.solicitado_en if ultima else None,
     }
