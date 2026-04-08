@@ -23,6 +23,7 @@ class Recomendacion(Base):
     __tablename__ = "recomendacion"
 
     id              = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    usuario_id      = Column(Integer, nullable=True, index=True)
     categoria_id    = Column(Integer, ForeignKey("categoria_recomendacion.id"), nullable=False)
     parcela_id      = Column(Integer, nullable=True, index=True)
     id_logico       = Column(String(50), nullable=True, index=True)
@@ -30,18 +31,15 @@ class Recomendacion(Base):
     descripcion     = Column(Text, nullable=False)
     accion          = Column(Text, nullable=False)
     prioridad       = Column(String(20), default="media")
-    # baja | media | alta | critica
     estado          = Column(String(20), default="activa")
-    # activa | aplicada | descartada | vencida
     fuente          = Column(String(50), nullable=True)
-    # ml | alerta | regla | manual
     datos_contexto  = Column(JSON, nullable=True)
     valida_hasta    = Column(DateTime(timezone=True), nullable=True)
     generada_en     = Column(DateTime(timezone=True), server_default=func.now())
     actualizada_en  = Column(DateTime(timezone=True), onupdate=func.now())
 
-    categoria       = relationship("CategoriaRecomendacion", back_populates="recomendaciones")
-    evidencias      = relationship("EvidenciaRecomendacion", back_populates="recomendacion", cascade="all, delete-orphan")
+    categoria  = relationship("CategoriaRecomendacion", back_populates="recomendaciones")
+    evidencias = relationship("EvidenciaRecomendacion", back_populates="recomendacion", cascade="all, delete-orphan")
 
 
 class EvidenciaRecomendacion(Base):
