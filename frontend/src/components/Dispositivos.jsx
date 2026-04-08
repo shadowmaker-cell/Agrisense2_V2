@@ -109,18 +109,30 @@ export default function Dispositivos() {
     intervalo_muestreo: '', umbral_bateria: '',
   })
 
+  // ── Carga principal — dispositivos y tipos siempre ─
+  // ── parcelas por separado para no bloquear si falla ─
   const load = async () => {
     try {
-      const [dispRes, tiposRes, parcelasRes] = await Promise.all([
+      const [dispRes, tiposRes] = await Promise.all([
         dispositivosAPI.listar(0, 100),
         dispositivosAPI.listarTipos(),
-        parcelasAPI.listar(),
       ])
       setDispositivos(dispRes.data)
       setTipos(tiposRes.data)
+    } catch(e) {
+      console.error('Error cargando dispositivos:', e)
+    } finally {
+      setLoading(false)
+    }
+
+    // Parcelas se carga independiente — si falla no rompe la pagina
+    try {
+      const parcelasRes = await parcelasAPI.listar()
       setParcelas(parcelasRes.data)
-    } catch(e) { console.error(e) }
-    finally { setLoading(false) }
+    } catch(e) {
+      console.warn('Parcelas no disponibles temporalmente:', e)
+      setParcelas([])
+    }
   }
 
   useEffect(() => { load() }, [])
@@ -185,7 +197,6 @@ export default function Dispositivos() {
       const res = await dispositivosAPI.hojaVida(selected.id)
       setHojaVida(res.data)
     } catch(e) {
-      console.error('Error cargando hoja de vida:', e)
       setHojaVida({ error: true })
     }
   }
@@ -220,12 +231,10 @@ export default function Dispositivos() {
   .table { width:100%; border-collapse:collapse; font-size:12px; }
   .table th { background:#f0fdf4; padding:8px 10px; text-align:left; font-weight:600; color:#16a34a; border-bottom:1px solid #d1fae5; }
   .table td { padding:7px 10px; border-bottom:1px solid #f3f4f6; color:#374151; }
-  .table tr:last-child td { border-bottom:none; }
   .badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:10px; font-weight:600; }
   .badge-activo { background:#d1fae5; color:#065f46; }
   .badge-retirado { background:#f3f4f6; color:#6b7280; }
   .badge-mantenimiento { background:#fef3c7; color:#92400e; }
-  .badge-desconectado { background:#fee2e2; color:#991b1b; }
   .footer { margin-top:40px; padding-top:16px; border-top:1px solid #e5e7eb; font-size:11px; color:#9ca3af; display:flex; justify-content:space-between; }
   @media print { body { padding:20px; } }
 </style>
@@ -238,10 +247,8 @@ export default function Dispositivos() {
       <div class="logo-sub">Plataforma de Agricultura de Precision</div>
     </div>
   </div>
-
   <h1>Hoja de Vida del Sensor</h1>
   <div class="subtitle">Generado el ${new Date().toLocaleString('es-CO')} · ID: ${hv.id_logico}</div>
-
   <div class="section">
     <div class="section-title">Datos del Sensor</div>
     <div class="grid">
@@ -256,28 +263,24 @@ export default function Dispositivos() {
       <div class="item"><div class="item-label">Total despliegues</div><div class="item-value">${hv.total_despliegues}</div></div>
     </div>
   </div>
-
   ${config ? `
   <div class="section">
     <div class="section-title">Configuracion Actual</div>
     <div class="grid">
-      <div class="item"><div class="item-label">Intervalo muestreo</div><div class="item-value">${config.intervalo_muestreo || 300} seg</div></div>
+      <div class="item"><div class="item-label">Intervalo</div><div class="item-value">${config.intervalo_muestreo || 300} seg</div></div>
       <div class="item"><div class="item-label">Protocolo</div><div class="item-value">${config.protocolo_transmision || 'HTTP'}</div></div>
       <div class="item"><div class="item-label">Umbral bateria</div><div class="item-value">${config.umbral_bateria || 20}%</div></div>
-      <div class="item"><div class="item-label">Limite minimo</div><div class="item-value">${config.limite_minimo != null ? config.limite_minimo : 'Por defecto'}</div></div>
-      <div class="item"><div class="item-label">Limite maximo</div><div class="item-value">${config.limite_maximo != null ? config.limite_maximo : 'Por defecto'}</div></div>
-      <div class="item"><div class="item-label">Parcela asignada</div><div class="item-value">${config.parcela_nombre || 'Sin asignar'}</div></div>
-      ${config.posicion_campo ? `<div class="item"><div class="item-label">Posicion campo</div><div class="item-value">${config.posicion_campo}</div></div>` : ''}
+      <div class="item"><div class="item-label">Limite minimo</div><div class="item-value">${config.limite_minimo != null ? config.limite_minimo : 'Defecto'}</div></div>
+      <div class="item"><div class="item-label">Limite maximo</div><div class="item-value">${config.limite_maximo != null ? config.limite_maximo : 'Defecto'}</div></div>
+      <div class="item"><div class="item-label">Parcela</div><div class="item-value">${config.parcela_nombre || 'Sin asignar'}</div></div>
     </div>
   </div>` : ''}
-
   ${historial.length > 0 ? `
   <div class="section">
-    <div class="section-title">Historial de Estados (${historial.length} cambios)</div>
+    <div class="section-title">Historial de Estados</div>
     <table class="table">
-      <thead><tr><th>Estado Anterior</th><th>Estado Nuevo</th><th>Fecha</th></tr></thead>
-      <tbody>
-        ${historial.map(h => `
+      <thead><tr><th>Anterior</th><th>Nuevo</th><th>Fecha</th></tr></thead>
+      <tbody>${historial.map(h => `
         <tr>
           <td>${h.estado_anterior || 'inicio'}</td>
           <td><span class="badge badge-${h.estado_nuevo}">${h.estado_nuevo}</span></td>
@@ -285,27 +288,23 @@ export default function Dispositivos() {
         </tr>`).join('')}
       </tbody>
     </table>
-  </div>` : '<div class="section"><div class="section-title">Historial de Estados</div><p style="font-size:13px;color:#6b7280">Sin cambios de estado registrados.</p></div>'}
-
+  </div>` : ''}
   ${despliegues.length > 0 ? `
   <div class="section">
-    <div class="section-title">Historial de Despliegues (${despliegues.length})</div>
+    <div class="section-title">Historial de Despliegues</div>
     <table class="table">
-      <thead><tr><th>Lote / Sector</th><th>Posicion</th><th>Estado</th><th>Instalado</th><th>Retirado</th></tr></thead>
-      <tbody>
-        ${despliegues.map(d => `
+      <thead><tr><th>Lote</th><th>Posicion</th><th>Estado</th><th>Instalado</th><th>Retirado</th></tr></thead>
+      <tbody>${despliegues.map(d => `
         <tr>
           <td>${d.lote_id}</td>
           <td>${d.posicion || '—'}</td>
           <td><span class="badge badge-${d.estado}">${d.estado}</span></td>
           <td>${d.instalado_en ? new Date(d.instalado_en).toLocaleDateString('es-CO') : '—'}</td>
           <td>${d.retirado_en ? new Date(d.retirado_en).toLocaleDateString('es-CO') : 'Activo'}</td>
-        </tr>
-        ${d.motivo_retiro ? `<tr><td colspan="5" style="font-size:11px;color:#ef4444;padding:4px 10px">Motivo: ${d.motivo_retiro}</td></tr>` : ''}`).join('')}
+        </tr>`).join('')}
       </tbody>
     </table>
-  </div>` : '<div class="section"><div class="section-title">Despliegues</div><p style="font-size:13px;color:#6b7280">Sin despliegues registrados.</p></div>'}
-
+  </div>` : ''}
   <div class="footer">
     <span>AgriSense — Plataforma de Agricultura de Precision</span>
     <span>Generado: ${new Date().toLocaleString('es-CO')}</span>
@@ -316,23 +315,21 @@ export default function Dispositivos() {
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
     const url  = URL.createObjectURL(blob)
     const win  = window.open(url, '_blank')
-    if (win) {
-      win.onload = () => setTimeout(() => win.print(), 600)
-    }
+    if (win) win.onload = () => setTimeout(() => win.print(), 600)
   }
 
   const handleActualizar = async () => {
     if (!selected) return
     setEditMsg('')
     const payload = {}
-    if (editForm.estado)                 payload.estado             = editForm.estado
-    if (editForm.limite_minimo !== '')   payload.limite_minimo      = parseFloat(editForm.limite_minimo)
-    if (editForm.limite_maximo !== '')   payload.limite_maximo      = parseFloat(editForm.limite_maximo)
-    if (editForm.parcela_id !== '')      payload.parcela_id         = parseInt(editForm.parcela_id)
-    if (editForm.parcela_nombre)         payload.parcela_nombre     = editForm.parcela_nombre
-    if (editForm.posicion_campo)         payload.posicion_campo     = editForm.posicion_campo
-    if (editForm.intervalo_muestreo !== '') payload.intervalo_muestreo = parseInt(editForm.intervalo_muestreo)
-    if (editForm.umbral_bateria !== '')  payload.umbral_bateria     = parseInt(editForm.umbral_bateria)
+    if (editForm.estado)                    payload.estado             = editForm.estado
+    if (editForm.limite_minimo !== '')       payload.limite_minimo      = parseFloat(editForm.limite_minimo)
+    if (editForm.limite_maximo !== '')       payload.limite_maximo      = parseFloat(editForm.limite_maximo)
+    if (editForm.parcela_id !== '')          payload.parcela_id         = parseInt(editForm.parcela_id)
+    if (editForm.parcela_nombre)             payload.parcela_nombre     = editForm.parcela_nombre
+    if (editForm.posicion_campo)             payload.posicion_campo     = editForm.posicion_campo
+    if (editForm.intervalo_muestreo !== '')  payload.intervalo_muestreo = parseInt(editForm.intervalo_muestreo)
+    if (editForm.umbral_bateria !== '')      payload.umbral_bateria     = parseInt(editForm.umbral_bateria)
     try {
       await dispositivosAPI.actualizar(selected.id, payload)
       setEditMsg('Configuracion actualizada correctamente')
@@ -353,9 +350,9 @@ export default function Dispositivos() {
         version_firmware:    form.version_firmware,
         estado:              form.estado,
       }
-      if (form.parcela_id)          payload.parcela_id     = parseInt(form.parcela_id)
-      if (form.parcela_nombre)      payload.parcela_nombre = form.parcela_nombre
-      if (form.posicion_campo)      payload.posicion_campo = form.posicion_campo
+      if (form.parcela_id)           payload.parcela_id     = parseInt(form.parcela_id)
+      if (form.parcela_nombre)       payload.parcela_nombre = form.parcela_nombre
+      if (form.posicion_campo)       payload.posicion_campo = form.posicion_campo
       if (form.limite_minimo !== '') payload.limite_minimo  = parseFloat(form.limite_minimo)
       if (form.limite_maximo !== '') payload.limite_maximo  = parseFloat(form.limite_maximo)
       await dispositivosAPI.registrar(payload)
@@ -402,7 +399,7 @@ export default function Dispositivos() {
         </button>
       </div>
 
-      {/* Formulario registro */}
+      {/* Formulario */}
       {showForm && (
         <div style={styles.formCard} className="animate-fade">
           <div style={styles.formTitle}>Registrar nuevo sensor</div>
@@ -448,14 +445,14 @@ export default function Dispositivos() {
                 onChange={e => setForm(p=>({...p,version_firmware:e.target.value}))} style={styles.input} />
             </div>
             <div style={styles.fieldGroup}>
-              <label style={styles.label}>Limite minimo personalizado</label>
-              <input type="number" step="0.1" placeholder="Usa rango del tipo por defecto"
+              <label style={styles.label}>Limite minimo</label>
+              <input type="number" step="0.1" placeholder="Por defecto del tipo"
                 value={form.limite_minimo}
                 onChange={e => setForm(p=>({...p,limite_minimo:e.target.value}))} style={styles.input} />
             </div>
             <div style={styles.fieldGroup}>
-              <label style={styles.label}>Limite maximo personalizado</label>
-              <input type="number" step="0.1" placeholder="Usa rango del tipo por defecto"
+              <label style={styles.label}>Limite maximo</label>
+              <input type="number" step="0.1" placeholder="Por defecto del tipo"
                 value={form.limite_maximo}
                 onChange={e => setForm(p=>({...p,limite_maximo:e.target.value}))} style={styles.input} />
             </div>
@@ -508,6 +505,11 @@ export default function Dispositivos() {
         <div style={styles.tableCard}>
           {loading ? (
             <div style={{padding:'40px',textAlign:'center',color:'#4b5563'}}>Cargando sensores...</div>
+          ) : filtered.length === 0 ? (
+            <div style={{padding:'40px',textAlign:'center',color:'#4b5563',fontSize:'13px'}}>
+              <div>No hay sensores registrados</div>
+              <div style={{marginTop:'6px',fontSize:'12px'}}>Haz clic en "Registrar sensor" para agregar el primero</div>
+            </div>
           ) : (
             <div className="table-wrap">
               <table>
@@ -575,21 +577,17 @@ export default function Dispositivos() {
                 <button key={tab} onClick={() => {
                   setActiveTab(tab)
                   if (tab === 'hoja-vida') handleCargarHojaVida()
-                }} style={{
-                  ...styles.tab,
-                  ...(activeTab===tab ? styles.tabActive : {})
-                }}>
+                }} style={{...styles.tab, ...(activeTab===tab ? styles.tabActive : {})}}>
                   {tab==='info'?'Info':tab==='editar'?'Editar':'Hoja de Vida'}
                 </button>
               ))}
             </div>
 
-            {/* Tab Info */}
             {activeTab === 'info' && (
               <>
                 <div style={styles.detailGrid}>
                   {[
-                    {label:'Estado',   value:selected.estado,                            color:ESTADO_COLOR[selected.estado]},
+                    {label:'Estado',   value:selected.estado, color:ESTADO_COLOR[selected.estado]},
                     {label:'Firmware', value:selected.version_firmware||'N/A'},
                     {label:'Parcela',  value:selected.configuracion?.parcela_nombre||'Sin asignar', color:'#4ade80'},
                     {label:'Posicion', value:selected.configuracion?.posicion_campo||'—'},
@@ -615,7 +613,6 @@ export default function Dispositivos() {
               </>
             )}
 
-            {/* Tab Editar */}
             {activeTab === 'editar' && (
               <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
                 <div style={styles.fieldGroup}>
@@ -664,25 +661,16 @@ export default function Dispositivos() {
                     onChange={e => setEditForm(p=>({...p,umbral_bateria:e.target.value}))} style={styles.input} />
                 </div>
                 <button onClick={handleActualizar} style={styles.submitBtn}>Guardar cambios</button>
-                {editMsg && (
-                  <div style={{fontSize:'13px',color:editMsg.includes('Error')?'#f87171':'#22c55e'}}>
-                    {editMsg}
-                  </div>
-                )}
+                {editMsg && <div style={{fontSize:'13px',color:editMsg.includes('Error')?'#f87171':'#22c55e'}}>{editMsg}</div>}
               </div>
             )}
 
-            {/* Tab Hoja de Vida */}
             {activeTab === 'hoja-vida' && (
               <div style={{display:'flex',flexDirection:'column',gap:'12px'}}>
                 {!hojaVida ? (
-                  <div style={{textAlign:'center',padding:'30px',color:'#4b5563',fontSize:'13px'}}>
-                    Cargando hoja de vida...
-                  </div>
+                  <div style={{textAlign:'center',padding:'30px',color:'#4b5563',fontSize:'13px'}}>Cargando hoja de vida...</div>
                 ) : hojaVida.error ? (
-                  <div style={{textAlign:'center',padding:'30px',color:'#f87171',fontSize:'13px'}}>
-                    Error cargando la hoja de vida. Verifica que el servicio esta corriendo.
-                  </div>
+                  <div style={{textAlign:'center',padding:'30px',color:'#f87171',fontSize:'13px'}}>Error cargando la hoja de vida.</div>
                 ) : (
                   <>
                     <button onClick={descargarHojaVida} style={{
@@ -690,7 +678,6 @@ export default function Dispositivos() {
                       background:'linear-gradient(135deg,#16a34a,#15803d)',
                       color:'#fff', border:'none', borderRadius:'8px',
                       fontSize:'13px', fontWeight:600, cursor:'pointer',
-                      fontFamily:"'DM Sans',sans-serif",
                       display:'flex', alignItems:'center', justifyContent:'center', gap:'8px',
                     }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -700,7 +687,6 @@ export default function Dispositivos() {
                       </svg>
                       Descargar / Imprimir PDF
                     </button>
-
                     <div style={styles.hvSection}>
                       <div style={styles.hvTitle}>Resumen</div>
                       <div style={styles.detailGrid}>
@@ -719,7 +705,6 @@ export default function Dispositivos() {
                         ))}
                       </div>
                     </div>
-
                     {hojaVida.historial_estados?.length > 0 && (
                       <div style={styles.hvSection}>
                         <div style={styles.hvTitle}>Historial de estados ({hojaVida.historial_estados.length})</div>
@@ -739,7 +724,6 @@ export default function Dispositivos() {
                         </div>
                       </div>
                     )}
-
                     {hojaVida.despliegues?.length > 0 && (
                       <div style={styles.hvSection}>
                         <div style={styles.hvTitle}>Despliegues ({hojaVida.despliegues.length})</div>
@@ -761,7 +745,6 @@ export default function Dispositivos() {
                         </div>
                       </div>
                     )}
-
                     {hojaVida.configuracion && (
                       <div style={styles.hvSection}>
                         <div style={styles.hvTitle}>Configuracion actual</div>
@@ -794,47 +777,47 @@ export default function Dispositivos() {
 }
 
 const styles = {
-  wrapper: { padding: '32px', maxWidth: '1200px' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' },
-  title: { fontFamily: "'Syne', sans-serif", fontSize: '26px', fontWeight: 700, color: '#f0fdf4' },
-  subtitle: { fontSize: '13px', color: '#6b7280', marginTop: '4px' },
-  addBtn: { display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 16px', borderRadius: '10px', border: '1px solid', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", transition: 'all 0.2s' },
-  formCard: { background: '#0d1510', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '16px', padding: '22px 24px', marginBottom: '20px' },
-  formTitle: { fontFamily: "'Syne', sans-serif", fontSize: '14px', fontWeight: 600, color: '#f0fdf4', marginBottom: '6px' },
-  formDesc: { fontSize: '12px', color: '#6b7280', marginBottom: '18px', lineHeight: 1.6 },
-  formGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' },
-  fieldGroup: { display: 'flex', flexDirection: 'column', gap: '5px' },
-  label: { fontSize: '11px', fontWeight: 500, color: '#86efac', letterSpacing: '0.4px' },
-  hint: { color: '#4b5563', fontWeight: 400, fontSize: '10px' },
-  input: { padding: '9px 12px', background: 'rgba(6,12,7,0.8)', border: '1px solid rgba(34,197,94,0.15)', borderRadius: '8px', color: '#f0fdf4', fontSize: '13px', fontFamily: "'DM Sans', sans-serif" },
-  errorMsg: { fontSize: '11px', color: '#f87171', marginTop: '3px' },
-  submitBtn: { width: '100%', padding: '10px', background: 'linear-gradient(135deg, #16a34a, #15803d)', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" },
-  filters: { display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' },
-  searchWrap: { position: 'relative', flex: 1, minWidth: '200px' },
-  searchIcon: { position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', color: '#4ade80' },
-  search: { width: '100%', padding: '9px 14px 9px 34px', background: '#0d1510', border: '1px solid rgba(34,197,94,0.15)', borderRadius: '8px', color: '#f0fdf4', fontSize: '13px', fontFamily: "'DM Sans', sans-serif" },
-  select: { padding: '9px 12px', background: '#0d1510', border: '1px solid rgba(34,197,94,0.15)', borderRadius: '8px', color: '#9ca3af', fontSize: '13px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" },
-  countTag: { background: 'rgba(34,197,94,0.08)', color: '#4ade80', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', border: '1px solid rgba(34,197,94,0.15)' },
-  catBadge: { padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 600 },
-  layout: { display: 'flex', gap: '16px' },
-  tableCard: { flex: 1, background: '#0d1510', border: '1px solid rgba(34,197,94,0.1)', borderRadius: '16px', overflow: 'hidden' },
-  detailPanel: { width: '300px', background: '#0d1510', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '16px', padding: '18px', height: 'fit-content', maxHeight: '90vh', overflowY: 'auto' },
+  wrapper:      { padding: '32px', maxWidth: '1200px' },
+  header:       { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' },
+  title:        { fontFamily: "'Syne', sans-serif", fontSize: '26px', fontWeight: 700, color: '#f0fdf4' },
+  subtitle:     { fontSize: '13px', color: '#6b7280', marginTop: '4px' },
+  addBtn:       { display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 16px', borderRadius: '10px', border: '1px solid', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", transition: 'all 0.2s' },
+  formCard:     { background: '#0d1510', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '16px', padding: '22px 24px', marginBottom: '20px' },
+  formTitle:    { fontFamily: "'Syne', sans-serif", fontSize: '14px', fontWeight: 600, color: '#f0fdf4', marginBottom: '6px' },
+  formDesc:     { fontSize: '12px', color: '#6b7280', marginBottom: '18px', lineHeight: 1.6 },
+  formGrid:     { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' },
+  fieldGroup:   { display: 'flex', flexDirection: 'column', gap: '5px' },
+  label:        { fontSize: '11px', fontWeight: 500, color: '#86efac', letterSpacing: '0.4px' },
+  hint:         { color: '#4b5563', fontWeight: 400, fontSize: '10px' },
+  input:        { padding: '9px 12px', background: 'rgba(6,12,7,0.8)', border: '1px solid rgba(34,197,94,0.15)', borderRadius: '8px', color: '#f0fdf4', fontSize: '13px', fontFamily: "'DM Sans', sans-serif" },
+  errorMsg:     { fontSize: '11px', color: '#f87171', marginTop: '3px' },
+  submitBtn:    { width: '100%', padding: '10px', background: 'linear-gradient(135deg, #16a34a, #15803d)', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" },
+  filters:      { display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' },
+  searchWrap:   { position: 'relative', flex: 1, minWidth: '200px' },
+  searchIcon:   { position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', color: '#4ade80' },
+  search:       { width: '100%', padding: '9px 14px 9px 34px', background: '#0d1510', border: '1px solid rgba(34,197,94,0.15)', borderRadius: '8px', color: '#f0fdf4', fontSize: '13px', fontFamily: "'DM Sans', sans-serif" },
+  select:       { padding: '9px 12px', background: '#0d1510', border: '1px solid rgba(34,197,94,0.15)', borderRadius: '8px', color: '#9ca3af', fontSize: '13px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" },
+  countTag:     { background: 'rgba(34,197,94,0.08)', color: '#4ade80', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', border: '1px solid rgba(34,197,94,0.15)' },
+  catBadge:     { padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 600 },
+  layout:       { display: 'flex', gap: '16px' },
+  tableCard:    { flex: 1, background: '#0d1510', border: '1px solid rgba(34,197,94,0.1)', borderRadius: '16px', overflow: 'hidden' },
+  detailPanel:  { width: '300px', background: '#0d1510', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '16px', padding: '18px', height: 'fit-content', maxHeight: '90vh', overflowY: 'auto' },
   detailHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' },
-  detailId: { fontFamily: 'monospace', color: '#4ade80', fontSize: '14px', fontWeight: 700 },
+  detailId:     { fontFamily: 'monospace', color: '#4ade80', fontSize: '14px', fontWeight: 700 },
   detailSerial: { fontSize: '11px', color: '#6b7280', marginTop: '2px' },
-  closeBtn: { background: 'none', border: 'none', color: '#4b5563', cursor: 'pointer', fontSize: '14px' },
-  tabs: { display: 'flex', gap: '3px', marginBottom: '14px', background: 'rgba(6,12,7,0.6)', borderRadius: '8px', padding: '4px' },
-  tab: { flex: 1, padding: '6px', borderRadius: '6px', border: 'none', background: 'transparent', color: '#6b7280', fontSize: '11px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", transition: 'all 0.15s' },
-  tabActive: { background: 'rgba(34,197,94,0.15)', color: '#22c55e' },
-  detailGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' },
-  detailItem: { background: 'rgba(6,12,7,0.6)', borderRadius: '8px', padding: '8px 10px' },
-  detailLabel: { fontSize: '10px', color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '3px' },
-  detailValue: { fontSize: '12px', fontWeight: 600, color: '#f0fdf4' },
+  closeBtn:     { background: 'none', border: 'none', color: '#4b5563', cursor: 'pointer', fontSize: '14px' },
+  tabs:         { display: 'flex', gap: '3px', marginBottom: '14px', background: 'rgba(6,12,7,0.6)', borderRadius: '8px', padding: '4px' },
+  tab:          { flex: 1, padding: '6px', borderRadius: '6px', border: 'none', background: 'transparent', color: '#6b7280', fontSize: '11px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", transition: 'all 0.15s' },
+  tabActive:    { background: 'rgba(34,197,94,0.15)', color: '#22c55e' },
+  detailGrid:   { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' },
+  detailItem:   { background: 'rgba(6,12,7,0.6)', borderRadius: '8px', padding: '8px 10px' },
+  detailLabel:  { fontSize: '10px', color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '3px' },
+  detailValue:  { fontSize: '12px', fontWeight: 600, color: '#f0fdf4' },
   metricasCard: { background: 'rgba(6,12,7,0.6)', borderRadius: '8px', padding: '10px', marginBottom: '10px' },
-  metricasTitle: { fontSize: '11px', color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '8px' },
+  metricasTitle:{ fontSize: '11px', color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '8px' },
   metricasList: { display: 'flex', flexWrap: 'wrap', gap: '5px' },
-  metricaTag: { background: 'rgba(34,197,94,0.1)', color: '#4ade80', padding: '2px 8px', borderRadius: '4px', fontSize: '11px' },
-  hvSection: { background: 'rgba(6,12,7,0.5)', borderRadius: '10px', padding: '12px', border: '1px solid rgba(34,197,94,0.08)' },
-  hvTitle: { fontFamily: "'Syne', sans-serif", fontSize: '12px', fontWeight: 600, color: '#86efac', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.6px' },
-  hvItem: { background: 'rgba(6,12,7,0.6)', borderRadius: '6px', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '3px' },
+  metricaTag:   { background: 'rgba(34,197,94,0.1)', color: '#4ade80', padding: '2px 8px', borderRadius: '4px', fontSize: '11px' },
+  hvSection:    { background: 'rgba(6,12,7,0.5)', borderRadius: '10px', padding: '12px', border: '1px solid rgba(34,197,94,0.08)' },
+  hvTitle:      { fontFamily: "'Syne', sans-serif", fontSize: '12px', fontWeight: 600, color: '#86efac', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.6px' },
+  hvItem:       { background: 'rgba(6,12,7,0.6)', borderRadius: '6px', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '3px' },
 }

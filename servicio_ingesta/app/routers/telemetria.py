@@ -35,7 +35,6 @@ VENTANAS = {
 }
 
 
-# ── Utilidades ────────────────────────────────────────
 def verificar_rate_limit(id_logico: str) -> bool:
     ahora         = datetime.now(timezone.utc)
     minuto_actual = ahora.strftime("%Y%m%d%H%M")
@@ -228,7 +227,7 @@ def alertas_por_dispositivo(
     return alertas
 
 
-# ── Promedios por ventana de tiempo (TimescaleDB) ─────
+# ── Promedios TimescaleDB ─────────────────────────────
 @router.get("/promedios/{id_logico}")
 def promedios_sensor(
     id_logico: str,
@@ -236,10 +235,6 @@ def promedios_sensor(
     ventana: str = "1h",
     db: Session = Depends(get_db)
 ):
-    """
-    Retorna promedios por ventana de tiempo.
-    ventana: 30m | 1h | 6h | 24h | 7d
-    """
     if ventana not in VENTANAS:
         raise HTTPException(
             status_code=400,
@@ -250,7 +245,6 @@ def promedios_sensor(
     intervalo  = VENTANAS[ventana]
 
     try:
-        # TimescaleDB time_bucket
         sql = text("""
             SELECT
                 time_bucket(:bucket, timestamp_lectura) AS periodo,
@@ -262,7 +256,7 @@ def promedios_sensor(
                 unidad
             FROM lectura_sensor
             WHERE id_logico  = :id_logico
-              AND timestamp_lectura >= NOW() - :intervalo::interval
+              AND timestamp_lectura >= NOW() - CAST(:intervalo AS interval)
               AND (:usuario_id IS NULL OR usuario_id = :usuario_id)
             GROUP BY periodo, tipo_metrica, unidad
             ORDER BY periodo DESC, tipo_metrica
@@ -275,7 +269,7 @@ def promedios_sensor(
         }).fetchall()
 
     except Exception:
-        # Fallback PostgreSQL estandar
+        # Fallback PostgreSQL estandar sin TimescaleDB
         sql = text("""
             SELECT
                 date_trunc('hour', timestamp_lectura)   AS periodo,
@@ -287,7 +281,7 @@ def promedios_sensor(
                 unidad
             FROM lectura_sensor
             WHERE id_logico  = :id_logico
-              AND timestamp_lectura >= NOW() - :intervalo::interval
+              AND timestamp_lectura >= NOW() - CAST(:intervalo AS interval)
               AND (:usuario_id IS NULL OR usuario_id = :usuario_id)
             GROUP BY periodo, tipo_metrica, unidad
             ORDER BY periodo DESC, tipo_metrica
@@ -326,7 +320,6 @@ def exportar_excel(
     dias: int = 7,
     db: Session = Depends(get_db)
 ):
-    """Exporta lecturas del sensor en Excel organizado por dia y hora con promedios."""
     import openpyxl
     from openpyxl.styles import Font, PatternFill, Alignment
     from openpyxl.utils import get_column_letter
@@ -345,7 +338,7 @@ def exportar_excel(
             unidad
         FROM lectura_sensor
         WHERE id_logico = :id_logico
-          AND timestamp_lectura >= NOW() - :dias::interval
+          AND timestamp_lectura >= NOW() - CAST(:dias AS interval)
           AND (:usuario_id IS NULL OR usuario_id = :usuario_id)
         GROUP BY fecha, hora, tipo_metrica, unidad
         ORDER BY fecha DESC, hora DESC, tipo_metrica
@@ -367,13 +360,11 @@ def exportar_excel(
     ws = wb.active
     ws.title = f"Lecturas {id_logico}"
 
-    # Estilos
     font_header  = Font(bold=True, color="FFFFFF")
     fill_header  = PatternFill("solid", fgColor="166534")
     fill_par     = PatternFill("solid", fgColor="f0fdf4")
     align_center = Alignment(horizontal="center")
 
-    # Titulo
     ws.merge_cells("A1:H1")
     ws["A1"]           = f"Reporte de Lecturas — Sensor {id_logico}"
     ws["A1"].font      = Font(bold=True, size=14, color="166534")
@@ -383,7 +374,6 @@ def exportar_excel(
     ws["A2"]           = f"Ultimos {dias} dias — AgriSense"
     ws["A2"].alignment = align_center
 
-    # Headers
     headers = ["Fecha", "Hora", "Metrica", "Promedio", "Minimo", "Maximo", "Total Lecturas", "Unidad"]
     for col, h in enumerate(headers, 1):
         cell           = ws.cell(row=4, column=col, value=h)
@@ -391,7 +381,6 @@ def exportar_excel(
         cell.fill      = fill_header
         cell.alignment = align_center
 
-    # Datos
     for i, row in enumerate(rows, 5):
         valores = [
             str(row.fecha),
@@ -409,7 +398,6 @@ def exportar_excel(
             if i % 2 == 0:
                 cell.fill = fill_par
 
-    # Anchos de columna
     for col, ancho in enumerate([14, 10, 22, 12, 12, 12, 16, 10], 1):
         ws.column_dimensions[get_column_letter(col)].width = ancho
 
