@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional
 from datetime import datetime
 
 
@@ -17,23 +17,23 @@ class NotificacionRespuesta(BaseModel):
     enviada_en:     Optional[datetime]
     leida:          bool
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class NotificacionManualEntrada(BaseModel):
     dispositivo_id: int
-    id_logico:      str = Field(..., min_length=3, max_length=50)
-    tipo_alerta:    str = Field(..., min_length=2, max_length=50)
-    tipo_metrica:   str = Field(..., min_length=2, max_length=50)
+    id_logico:      str   = Field(..., min_length=3, max_length=50)
+    tipo_alerta:    str   = Field(..., min_length=2, max_length=50)
+    tipo_metrica:   str   = Field(..., min_length=2, max_length=50)
     valor:          float
-    condicion:      str = Field(..., min_length=3, max_length=255)
-    severidad:      str = Field(..., pattern="^(baja|media|alta|critica)$")
-    canal:          str = Field(default="sistema")
+    condicion:      str   = Field(..., min_length=3, max_length=255)
+    severidad:      str   = Field(..., pattern="^(baja|media|alta|critica)$")
+    canal:          str   = Field(default="email")
+    email_destino:  Optional[str] = Field(default="")
 
 
 class PreferenciaEntrada(BaseModel):
-    canal_preferido:  str = Field(default="sistema")
+    canal_preferido:  str  = Field(default="email")
     activo:           bool = True
     alertas_criticas: bool = True
     alertas_altas:    bool = True
@@ -51,14 +51,13 @@ class PreferenciaRespuesta(BaseModel):
     alertas_medias:   bool
     alertas_bajas:    bool
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class ResumenNotificaciones(BaseModel):
-    total:            int
-    pendientes:       int
-    enviadas:         int
-    fallidas:         int
-    no_leidas:        int
-    criticas:         int
+    total:     int
+    pendientes: int
+    enviadas:  int
+    fallidas:  int
+    no_leidas: int
+    criticas:  int

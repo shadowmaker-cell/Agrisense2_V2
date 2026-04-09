@@ -30,7 +30,8 @@ def enviar_notificacion_manual(
         "valor_detectado": payload.valor,
         "condicion":       payload.condicion,
         "severidad":       payload.severidad,
-        "event":           "manual"
+        "event":           "manual",
+        "email_destino":   payload.email_destino or "",
     }
     resultado = procesar_alerta(db, datos)
     return {
@@ -93,7 +94,10 @@ def notificaciones_por_dispositivo(
         query = query.filter(Notificacion.usuario_id == usuario_id)
     notificaciones = query.order_by(Notificacion.creada_en.desc()).limit(limite).all()
     if not notificaciones:
-        raise HTTPException(status_code=404, detail=f"No se encontraron notificaciones para {id_logico}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"No se encontraron notificaciones para {id_logico}"
+        )
     return notificaciones
 
 
