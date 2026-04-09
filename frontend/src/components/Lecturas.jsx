@@ -162,7 +162,7 @@ export default function Lecturas() {
     setExportLoading(true)
     try {
       const token = localStorage.getItem('access_token')
-      const url   = `/api/v1/telemetria/export/${sensorSel.id}/excel?dias=${diasExport}`
+      const url = `/api/ingesta/api/v1/telemetria/export/${sensorSel.id}/excel?dias=${diasExport}`
       const res   = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
       if (!res.ok) { alert('No hay datos para exportar en ese rango'); return }
       const blob  = await res.blob()

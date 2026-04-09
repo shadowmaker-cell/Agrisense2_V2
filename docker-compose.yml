@@ -226,6 +226,9 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: "1234"
       POSTGRES_DB: notificaciones_db
+      GMAIL_USER: axben888@gmail.com
+      GMAIL_PASSWORD: ayow tvzx azgp rnmi
+      GMAIL_FROM: AgriSense <axben888@gmail.com>
     volumes:
       - postgres_notificaciones_data:/var/lib/postgresql/data
     healthcheck:

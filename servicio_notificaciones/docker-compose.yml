@@ -14,6 +14,7 @@ services:
       DEVICE_SERVICE_URL: http://servicio-dispositivos:8001
       JWT_SECRET: local-secret-dev
       REFRESH_SECRET: local-refresh-dev
+      AUTH_SERVICE_URL: http://servicio-auth:8008
     depends_on:
       postgres:
         condition: service_healthy
