@@ -1,8 +1,8 @@
 {
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "https://agrisense-gateway.onrender.com/api/:path*"
+      "source": "/api/(.*)",
+      "destination": "https://agrisense-gateway.onrender.com/api/$1"
     }
   ]
 }
