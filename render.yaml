@@ -82,6 +82,100 @@ services:
         value: ""
 
   - type: web
+    name: agrisense-notificaciones
+    runtime: docker
+    dockerfilePath: ./servicio_notificaciones/Dockerfile
+    dockerContext: ./servicio_notificaciones
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        value: postgresql://neondb_owner:npg_6Mg0xDAjXcKe@ep-wild-surf-ajd42p5q-pooler.c-3.us-east-2.aws.neon.tech/neondb?sslmode=require
+      - key: JWT_SECRET
+        value: agrisense_jwt_secret_2026_prod
+      - key: REFRESH_SECRET
+        value: agrisense_refresh_secret_2026_prod
+      - key: AUTH_SERVICE_URL
+        value: https://agrisense-auth.onrender.com
+      - key: DEVICE_SERVICE_URL
+        value: https://agrisense-dispositivos.onrender.com
+      - key: GMAIL_USER
+        value: axben888@gmail.com
+      - key: GMAIL_PASSWORD
+        value: ayow tvzx azgp rnmi
+      - key: GMAIL_FROM
+        value: AgriSense <axben888@gmail.com>
+      - key: APP_ENV
+        value: production
+      - key: BROKER_URL
+        value: ""
+
+  - type: web
+    name: agrisense-parcelas
+    runtime: docker
+    dockerfilePath: ./servicio_parcelas/Dockerfile
+    dockerContext: ./servicio_parcelas
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        value: postgresql://neondb_owner:npg_UM3WJit8lKRD@ep-raspy-river-ajgwqad1-pooler.c-3.us-east-2.aws.neon.tech/neondb?sslmode=require
+      - key: JWT_SECRET
+        value: agrisense_jwt_secret_2026_prod
+      - key: REFRESH_SECRET
+        value: agrisense_refresh_secret_2026_prod
+      - key: DEVICE_SERVICE_URL
+        value: https://agrisense-dispositivos.onrender.com
+      - key: APP_ENV
+        value: production
+      - key: BROKER_URL
+        value: ""
+
+  - type: web
+    name: agrisense-ml
+    runtime: docker
+    dockerfilePath: ./servicio_ml/Dockerfile
+    dockerContext: ./servicio_ml
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        value: postgresql://neondb_owner:npg_4VuSspar2gmB@ep-odd-thunder-aemfljpy-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require
+      - key: JWT_SECRET
+        value: agrisense_jwt_secret_2026_prod
+      - key: REFRESH_SECRET
+        value: agrisense_refresh_secret_2026_prod
+      - key: DEVICE_SERVICE_URL
+        value: https://agrisense-dispositivos.onrender.com
+      - key: INGESTA_SERVICE_URL
+        value: https://agrisense-ingesta.onrender.com
+      - key: APP_ENV
+        value: production
+      - key: BROKER_URL
+        value: ""
+
+  - type: web
+    name: agrisense-recomendaciones
+    runtime: docker
+    dockerfilePath: ./servicio_recomendaciones/Dockerfile
+    dockerContext: ./servicio_recomendaciones
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        value: postgresql://neondb_owner:npg_ykcrRm6gsIT7@ep-little-darkness-ajnmrayp-pooler.c-3.us-east-2.aws.neon.tech/neondb?sslmode=require
+      - key: JWT_SECRET
+        value: agrisense_jwt_secret_2026_prod
+      - key: REFRESH_SECRET
+        value: agrisense_refresh_secret_2026_prod
+      - key: DEVICE_SERVICE_URL
+        value: https://agrisense-dispositivos.onrender.com
+      - key: INGESTA_SERVICE_URL
+        value: https://agrisense-ingesta.onrender.com
+      - key: PROCESAMIENTO_SERVICE_URL
+        value: https://agrisense-procesamiento.onrender.com
+      - key: APP_ENV
+        value: production
+      - key: BROKER_URL
+        value: ""
+
+  - type: web
     name: agrisense-gateway
     runtime: docker
     dockerfilePath: ./nginx/Dockerfile
