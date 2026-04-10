@@ -8,7 +8,7 @@ import random
 import time
 from datetime import datetime
 
-API_BASE = "http://localhost:8000"
+API_BASE = "https://agrisense-gateway.onrender.com"
 
 TIPO_METRICA_MAP = {
     1: ("humedad_suelo",     "%",    5,   95  ),
