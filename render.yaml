@@ -36,6 +36,8 @@ services:
         value: agrisense_refresh_secret_2026_prod
       - key: APP_ENV
         value: production
+      - key: BROKER_URL
+        value: ""
 
   - type: web
     name: agrisense-ingesta
@@ -54,6 +56,8 @@ services:
         value: https://agrisense-dispositivos.onrender.com
       - key: APP_ENV
         value: production
+      - key: BROKER_URL
+        value: ""
 
   - type: web
     name: agrisense-procesamiento
@@ -72,5 +76,17 @@ services:
         value: https://agrisense-dispositivos.onrender.com
       - key: INGESTA_SERVICE_URL
         value: https://agrisense-ingesta.onrender.com
+      - key: APP_ENV
+        value: production
+      - key: BROKER_URL
+        value: ""
+
+  - type: web
+    name: agrisense-gateway
+    runtime: docker
+    dockerfilePath: ./nginx/Dockerfile
+    dockerContext: ./nginx
+    plan: free
+    envVars:
       - key: APP_ENV
         value: production
