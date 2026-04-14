@@ -53,6 +53,9 @@ class Dispositivo(Base):
     despliegues       = relationship("DespliegueDispositivo",
                                      foreign_keys="DespliegueDispositivo.dispositivo_id",
                                      back_populates="dispositivo")
+    mantenimientos = relationship("RegistroMantenimiento",
+                                   back_populates="dispositivo",
+                                   order_by="RegistroMantenimiento.fecha_inicio.desc()")
 
 class ConfiguracionDispositivo(Base):
     """Parametros tecnicos del sensor — editables por el usuario."""
@@ -124,3 +127,35 @@ class DespliegueDispositivo(Base):
     dispositivo = relationship("Dispositivo", foreign_keys=[dispositivo_id],
                                back_populates="despliegues")
     reemplazo   = relationship("Dispositivo", foreign_keys=[reemplazado_por])
+    
+class RegistroMantenimiento(Base):
+    """Historial de mantenimientos correctivos y preventivos del sensor."""
+    __tablename__ = "registro_mantenimiento"
+    __table_args__ = (
+        CheckConstraint(
+            "tipo IN ('correctivo','preventivo','calibracion','inspeccion')",
+            name="ck_mantenimiento_tipo"
+        ),
+        CheckConstraint(
+            "resultado IN ('exitoso','fallido','pendiente','parcial')",
+            name="ck_mantenimiento_resultado"
+        ),
+    )
+
+    id              = Column(Integer, primary_key=True, index=True)
+    dispositivo_id  = Column(Integer, ForeignKey("dispositivo.id"), nullable=False, index=True)
+    usuario_id      = Column(Integer, nullable=True, index=True)
+    tipo            = Column(String(20), nullable=False, default="preventivo")
+    titulo          = Column(String(100), nullable=False)
+    descripcion     = Column(String(500), nullable=True)
+    causa           = Column(String(200), nullable=True)
+    acciones        = Column(String(500), nullable=True)
+    resultado       = Column(String(20), default="exitoso")
+    tecnico         = Column(String(100), nullable=True)
+    costo           = Column(Float, nullable=True)
+    fecha_inicio    = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    fecha_fin       = Column(DateTime(timezone=True), nullable=True)
+    proxima_revision = Column(DateTime(timezone=True), nullable=True)
+    creado_en       = Column(DateTime(timezone=True), server_default=func.now())
+
+    dispositivo = relationship("Dispositivo", back_populates="mantenimientos")

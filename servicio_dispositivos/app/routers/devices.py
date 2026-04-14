@@ -2,11 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime, timezone
+from pydantic import BaseModel as PydanticBase
 from app.database import get_db
 from app.models.device import (
     Dispositivo, ConfiguracionDispositivo,
     HistorialEstadoDispositivo, TipoDispositivo,
-    DespliegueDispositivo
+    DespliegueDispositivo, RegistroMantenimiento
 )
 from app.schemas.device import (
     CrearDispositivo, ActualizarDispositivo,
@@ -18,6 +19,40 @@ from app.events.producer import publicar_dispositivo_creado, publicar_dispositiv
 from app.utils.jwt import get_usuario_id, get_usuario_id_opcional
 
 router = APIRouter(prefix="/api/v1/dispositivos", tags=["Dispositivos"])
+
+
+# ── Schemas mantenimiento ─────────────────────────────
+class MantenimientoEntrada(PydanticBase):
+    tipo:             str            = "preventivo"
+    titulo:           str
+    descripcion:      Optional[str]  = None
+    causa:            Optional[str]  = None
+    acciones:         Optional[str]  = None
+    resultado:        str            = "exitoso"
+    tecnico:          Optional[str]  = None
+    costo:            Optional[float] = None
+    fecha_inicio:     Optional[datetime] = None
+    fecha_fin:        Optional[datetime] = None
+    proxima_revision: Optional[datetime] = None
+
+
+class MantenimientoRespuesta(PydanticBase):
+    id:               int
+    dispositivo_id:   int
+    tipo:             str
+    titulo:           str
+    descripcion:      Optional[str]
+    causa:            Optional[str]
+    acciones:         Optional[str]
+    resultado:        str
+    tecnico:          Optional[str]
+    costo:            Optional[float]
+    fecha_inicio:     Optional[datetime]
+    fecha_fin:        Optional[datetime]
+    proxima_revision: Optional[datetime]
+    creado_en:        datetime
+
+    model_config = {"from_attributes": True}
 
 
 # ── Health ────────────────────────────────────────────
@@ -220,6 +255,10 @@ def hoja_de_vida(
         DespliegueDispositivo.dispositivo_id == dispositivo_id
     ).order_by(DespliegueDispositivo.instalado_en.desc()).all()
 
+    mantenimientos = db.query(RegistroMantenimiento).filter(
+        RegistroMantenimiento.dispositivo_id == dispositivo_id
+    ).order_by(RegistroMantenimiento.fecha_inicio.desc()).all()
+
     config = dispositivo.configuracion
 
     return {
@@ -244,6 +283,7 @@ def hoja_de_vida(
         } if config else None,
         "total_cambios_estado": len(historial),
         "total_despliegues":    len(despliegues),
+        "total_mantenimientos": len(mantenimientos),
         "historial_estados": [
             {
                 "estado_anterior": h.estado_anterior,
@@ -260,6 +300,23 @@ def hoja_de_vida(
                 "retirado_en":   d.retirado_en,
                 "motivo_retiro": d.motivo_retiro,
             } for d in despliegues
+        ],
+        "mantenimientos": [
+            {
+                "id":               m.id,
+                "tipo":             m.tipo,
+                "titulo":           m.titulo,
+                "descripcion":      m.descripcion,
+                "causa":            m.causa,
+                "acciones":         m.acciones,
+                "resultado":        m.resultado,
+                "tecnico":          m.tecnico,
+                "costo":            m.costo,
+                "fecha_inicio":     m.fecha_inicio,
+                "fecha_fin":        m.fecha_fin,
+                "proxima_revision": m.proxima_revision,
+                "creado_en":        m.creado_en,
+            } for m in mantenimientos
         ],
     }
 
@@ -370,3 +427,71 @@ def retirar_sensor(
     db.commit()
     db.refresh(despliegue)
     return despliegue
+
+
+# ── Mantenimiento ─────────────────────────────────────
+@router.post("/{dispositivo_id}/mantenimiento",
+             response_model=MantenimientoRespuesta, status_code=201)
+def registrar_mantenimiento(
+    dispositivo_id: int,
+    payload: MantenimientoEntrada,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    usuario_id = get_usuario_id(request)
+    dispositivo = db.query(Dispositivo).filter(
+        Dispositivo.id == dispositivo_id,
+        Dispositivo.usuario_id == usuario_id
+    ).first()
+    if not dispositivo:
+        raise HTTPException(status_code=404, detail="Sensor no encontrado")
+
+    mantenimiento = RegistroMantenimiento(
+        dispositivo_id   = dispositivo_id,
+        usuario_id       = usuario_id,
+        tipo             = payload.tipo,
+        titulo           = payload.titulo,
+        descripcion      = payload.descripcion,
+        causa            = payload.causa,
+        acciones         = payload.acciones,
+        resultado        = payload.resultado,
+        tecnico          = payload.tecnico,
+        costo            = payload.costo,
+        fecha_inicio     = payload.fecha_inicio or datetime.now(timezone.utc),
+        fecha_fin        = payload.fecha_fin,
+        proxima_revision = payload.proxima_revision,
+    )
+
+    # Si es correctivo cambiar estado a mantenimiento
+    if payload.tipo == "correctivo" and dispositivo.estado == "activo":
+        db.add(HistorialEstadoDispositivo(
+            dispositivo_id  = dispositivo_id,
+            estado_anterior = dispositivo.estado,
+            estado_nuevo    = "mantenimiento"
+        ))
+        dispositivo.estado = "mantenimiento"
+
+    db.add(mantenimiento)
+    db.commit()
+    db.refresh(mantenimiento)
+    return mantenimiento
+
+
+@router.get("/{dispositivo_id}/mantenimiento",
+            response_model=List[MantenimientoRespuesta])
+def listar_mantenimientos(
+    dispositivo_id: int,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    usuario_id = get_usuario_id(request)
+    dispositivo = db.query(Dispositivo).filter(
+        Dispositivo.id == dispositivo_id,
+        Dispositivo.usuario_id == usuario_id
+    ).first()
+    if not dispositivo:
+        raise HTTPException(status_code=404, detail="Sensor no encontrado")
+
+    return db.query(RegistroMantenimiento).filter(
+        RegistroMantenimiento.dispositivo_id == dispositivo_id
+    ).order_by(RegistroMantenimiento.fecha_inicio.desc()).all()
