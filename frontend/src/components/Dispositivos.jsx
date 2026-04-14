@@ -4,69 +4,30 @@ import { dispositivosAPI, parcelasAPI } from '../api/client'
 const ESTADO_COLOR = { activo: '#22c55e', inactivo: '#6b7280', mantenimiento: '#fbbf24', desconectado: '#f87171' }
 
 const CAT_STYLES = {
-  suelo:     { color: '#a3e635', bg: 'rgba(163,230,53,0.12)',  border: 'rgba(163,230,53,0.3)'  },
-  ambiental: { color: '#38bdf8', bg: 'rgba(56,189,248,0.12)', border: 'rgba(56,189,248,0.3)'  },
-  agua:      { color: '#2dd4bf', bg: 'rgba(45,212,191,0.12)', border: 'rgba(45,212,191,0.3)'  },
-  infra:     { color: '#c084fc', bg: 'rgba(192,132,252,0.12)',border: 'rgba(192,132,252,0.3)' },
+  suelo:              { color: '#a3e635', bg: 'rgba(163,230,53,0.12)',  border: 'rgba(163,230,53,0.3)'  },
+  ambiental:          { color: '#38bdf8', bg: 'rgba(56,189,248,0.12)', border: 'rgba(56,189,248,0.3)'  },
+  agua:               { color: '#2dd4bf', bg: 'rgba(45,212,191,0.12)', border: 'rgba(45,212,191,0.3)'  },
+  planta:             { color: '#86efac', bg: 'rgba(134,239,172,0.12)',border: 'rgba(134,239,172,0.3)' },
+  actuador_riego:     { color: '#60a5fa', bg: 'rgba(96,165,250,0.12)', border: 'rgba(96,165,250,0.3)'  },
+  actuador_bombeo:    { color: '#818cf8', bg: 'rgba(129,140,248,0.12)',border: 'rgba(129,140,248,0.3)' },
+  actuador_clima:     { color: '#fb923c', bg: 'rgba(251,146,60,0.12)', border: 'rgba(251,146,60,0.3)'  },
+  actuador_iluminacion:{ color: '#fbbf24', bg: 'rgba(251,191,36,0.12)',border: 'rgba(251,191,36,0.3)' },
+  computacion:        { color: '#c084fc', bg: 'rgba(192,132,252,0.12)',border: 'rgba(192,132,252,0.3)' },
+  infraestructura:    { color: '#94a3b8', bg: 'rgba(148,163,184,0.12)',border: 'rgba(148,163,184,0.3)' },
+  energia:            { color: '#facc15', bg: 'rgba(250,204,21,0.12)', border: 'rgba(250,204,21,0.3)'  },
 }
 
-const ID_PREFIJOS = {
-  1:'SOIL_HUM', 2:'SOIL_PH',  3:'SOIL_EC',  4:'SOIL_TEMP',
-  5:'AIR_TEMP', 6:'AIR_HUM',  7:'LUX',      8:'WIND',
-  9:'RAIN',    10:'WAT_PH',  11:'WAT_FLOW', 12:'VALVE',
-  13:'PUMP',   14:'MCU',     15:'ETH',      16:'BATT',
-  17:'SOLAR',
+const TIPO_COLOR = {
+  correctivo: '#f87171', preventivo: '#22c55e',
+  calibracion: '#60a5fa', inspeccion: '#fbbf24',
+}
+const RESULT_COLOR = {
+  exitoso: '#22c55e', parcial: '#fbbf24',
+  fallido: '#f87171', pendiente: '#6b7280',
 }
 
-const TIPO_SERIAL_ABBREV = {
-  1:'HUM-CAP', 2:'PHS-450', 3:'ECS-100', 4:'TMP-S10',
-  5:'TMP-A20', 6:'HUM-AIR', 7:'LUX-300', 8:'WND-200',
-  9:'RAN-100',10:'PHS-WAT',11:'FLW-100',12:'VLV-100',
-  13:'PMP-100',14:'MCU-ESP',15:'ETH-W5K',16:'BAT-LPO',
-  17:'SOL-PNL',
-}
-
-const TIPO_OPCIONES = [
-  {id:1, nombre:'Sensor Humedad Suelo',     categoria:'suelo'    },
-  {id:2, nombre:'Sensor pH Suelo',          categoria:'suelo'    },
-  {id:3, nombre:'Sensor EC Suelo',          categoria:'suelo'    },
-  {id:4, nombre:'Sensor Temperatura Suelo', categoria:'suelo'    },
-  {id:5, nombre:'Sensor Temperatura Aire',  categoria:'ambiental'},
-  {id:6, nombre:'Sensor Humedad Aire',      categoria:'ambiental'},
-  {id:7, nombre:'Sensor Luz',               categoria:'ambiental'},
-  {id:8, nombre:'Sensor Viento',            categoria:'ambiental'},
-  {id:9, nombre:'Sensor Lluvia',            categoria:'ambiental'},
-  {id:10,nombre:'Sensor pH Agua',           categoria:'agua'     },
-  {id:11,nombre:'Sensor Caudal',            categoria:'agua'     },
-  {id:12,nombre:'Valvula Riego',            categoria:'agua'     },
-  {id:13,nombre:'Bomba Agua',               categoria:'agua'     },
-  {id:14,nombre:'Microcontrolador',         categoria:'infra'    },
-  {id:15,nombre:'Modulo Ethernet',          categoria:'infra'    },
-  {id:16,nombre:'Sensor Bateria',           categoria:'infra'    },
-  {id:17,nombre:'Panel Solar',              categoria:'infra'    },
-]
-
-function generarIdLogico(tipoId, dispositivos) {
-  const prefijo = ID_PREFIJOS[tipoId]
-  if (!prefijo) return ''
-  const existentes = dispositivos
-    .filter(d => d.id_logico?.startsWith(prefijo + '_'))
-    .map(d => { const m = d.id_logico.match(/(\d+)$/); return m ? parseInt(m[1]) : 0 })
-  const siguiente = existentes.length > 0 ? Math.max(...existentes) + 1 : 1
-  return `${prefijo}_${String(siguiente).padStart(2,'0')}`
-}
-
-function generarSerial(tipoId, dispositivos) {
-  const abbrev = TIPO_SERIAL_ABBREV[tipoId] || 'SEN-GEN'
-  const existentes = dispositivos
-    .filter(d => d.numero_serial?.startsWith(`SN-${abbrev}-`))
-    .map(d => { const m = d.numero_serial.match(/(\d{3})$/); return m ? parseInt(m[1]) : 0 })
-  const siguiente = existentes.length > 0 ? Math.max(...existentes) + 1 : 1
-  return `SN-${abbrev}-${String(siguiente).padStart(3,'0')}`
-}
-
-const REGEX_ID_LOGICO = /^[A-Z][A-Z0-9_]{2,19}(_\d{2,3})?$/
-const REGEX_SERIAL    = /^SN-[A-Z0-9]{2,5}-[A-Z0-9]{2,5}-\d{3}$/
+const REGEX_ID_LOGICO = /^[A-Z][A-Z0-9_]{2,29}$/
+const REGEX_SERIAL    = /^SN-[A-Z0-9]{2,8}-[A-Z0-9]{2,8}-\d{3}$/
 
 function validarCampos(form) {
   const errores = {}
@@ -94,10 +55,12 @@ export default function Dispositivos() {
   const [formLoading, setFormLoading]   = useState(false)
   const [formErrores, setFormErrores]   = useState({})
   const [editMsg, setEditMsg]           = useState('')
+  const [mantenimientos, setMantenimientos] = useState([])
+  const [mantMsg, setMantMsg]           = useState('')
+  const [mantLoading, setMantLoading]   = useState(false)
 
   const [form, setForm] = useState({
-    tipo_dispositivo_id: 1,
-    numero_serial: '', id_logico: '',
+    tipo_dispositivo_id: '', numero_serial: '', id_logico: '',
     version_firmware: '1.0.0', estado: 'activo',
     parcela_id: '', parcela_nombre: '', posicion_campo: '',
     limite_minimo: '', limite_maximo: '',
@@ -109,12 +72,17 @@ export default function Dispositivos() {
     intervalo_muestreo: '', umbral_bateria: '',
   })
 
-  // ── Carga principal — dispositivos y tipos siempre ─
-  // ── parcelas por separado para no bloquear si falla ─
+  const [mantForm, setMantForm] = useState({
+    tipo: 'preventivo', titulo: '', descripcion: '',
+    causa: '', acciones: '', resultado: 'exitoso',
+    tecnico: '', costo: '', fecha_inicio: '', fecha_fin: '',
+    proxima_revision: '',
+  })
+
   const load = async () => {
     try {
       const [dispRes, tiposRes] = await Promise.all([
-        dispositivosAPI.listar(0, 100),
+        dispositivosAPI.listar(0, 200),
         dispositivosAPI.listarTipos(),
       ])
       setDispositivos(dispRes.data)
@@ -124,40 +92,15 @@ export default function Dispositivos() {
     } finally {
       setLoading(false)
     }
-
-    // Parcelas se carga independiente — si falla no rompe la pagina
     try {
       const parcelasRes = await parcelasAPI.listar()
       setParcelas(parcelasRes.data)
     } catch(e) {
-      console.warn('Parcelas no disponibles temporalmente:', e)
       setParcelas([])
     }
   }
 
   useEffect(() => { load() }, [])
-
-  useEffect(() => {
-    if (showForm) {
-      setForm(prev => ({
-        ...prev,
-        id_logico:     generarIdLogico(prev.tipo_dispositivo_id, dispositivos),
-        numero_serial: generarSerial(prev.tipo_dispositivo_id, dispositivos),
-      }))
-      setFormErrores({}); setFormMsg('')
-    }
-  }, [showForm])
-
-  const handleTipoChange = (tipoId) => {
-    const id = parseInt(tipoId)
-    setForm(prev => ({
-      ...prev,
-      tipo_dispositivo_id: id,
-      id_logico:     generarIdLogico(id, dispositivos),
-      numero_serial: generarSerial(id, dispositivos),
-    }))
-    setFormErrores(prev => ({...prev, id_logico: '', numero_serial: ''}))
-  }
 
   const handleParcela = (parcela_id, formSetter) => {
     const parcela = parcelas.find(p => p.id === parseInt(parcela_id))
@@ -170,10 +113,8 @@ export default function Dispositivos() {
 
   const handleSelect = async (d) => {
     setSelected(d)
-    setEditMsg('')
-    setHojaVida(null)
-    setMetricas(null)
-    setActiveTab('info')
+    setEditMsg(''); setHojaVida(null); setMetricas(null)
+    setMantenimientos([]); setActiveTab('info')
     setEditForm({
       estado:             d.estado,
       limite_minimo:      d.configuracion?.limite_minimo ?? '',
@@ -196,9 +137,40 @@ export default function Dispositivos() {
     try {
       const res = await dispositivosAPI.hojaVida(selected.id)
       setHojaVida(res.data)
-    } catch(e) {
-      setHojaVida({ error: true })
-    }
+    } catch(e) { setHojaVida({ error: true }) }
+  }
+
+  const handleCargarMantenimientos = async () => {
+    if (!selected) return
+    try {
+      const res = await dispositivosAPI.mantenimientos(selected.id)
+      setMantenimientos(res.data)
+    } catch(e) { setMantenimientos([]) }
+  }
+
+  const handleRegistrarMantenimiento = async (e) => {
+    e.preventDefault()
+    if (!mantForm.titulo) { setMantMsg('El titulo es obligatorio'); return }
+    setMantLoading(true); setMantMsg('')
+    try {
+      await dispositivosAPI.registrarMant(selected.id, {
+        ...mantForm,
+        costo:            mantForm.costo            ? parseFloat(mantForm.costo) : null,
+        fecha_inicio:     mantForm.fecha_inicio     || null,
+        fecha_fin:        mantForm.fecha_fin        || null,
+        proxima_revision: mantForm.proxima_revision || null,
+      })
+      setMantMsg('Mantenimiento registrado correctamente')
+      await handleCargarMantenimientos()
+      await load()
+      setMantForm({
+        tipo: 'preventivo', titulo: '', descripcion: '',
+        causa: '', acciones: '', resultado: 'exitoso',
+        tecnico: '', costo: '', fecha_inicio: '', fecha_fin: '',
+        proxima_revision: '',
+      })
+    } catch(e) { setMantMsg('Error al registrar mantenimiento') }
+    finally { setMantLoading(false) }
   }
 
   const descargarHojaVida = () => {
@@ -207,6 +179,7 @@ export default function Dispositivos() {
     const config    = hv.configuracion || {}
     const historial = hv.historial_estados || []
     const despliegues = hv.despliegues || []
+    const mantos    = hv.mantenimientos || []
 
     const html = `<!DOCTYPE html>
 <html lang="es">
@@ -215,7 +188,7 @@ export default function Dispositivos() {
 <title>Hoja de Vida — ${hv.id_logico}</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#1a1a1a; padding:40px; max-width:800px; margin:auto; }
+  body { font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#1a1a1a; padding:40px; max-width:860px; margin:auto; }
   .logo { display:flex; align-items:center; gap:12px; margin-bottom:32px; padding-bottom:20px; border-bottom:3px solid #16a34a; }
   .logo-icon { width:48px; height:48px; background:#16a34a; border-radius:10px; display:flex; align-items:center; justify-content:center; color:white; font-size:22px; }
   .logo-text { font-size:22px; font-weight:800; color:#16a34a; }
@@ -233,8 +206,15 @@ export default function Dispositivos() {
   .table td { padding:7px 10px; border-bottom:1px solid #f3f4f6; color:#374151; }
   .badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:10px; font-weight:600; }
   .badge-activo { background:#d1fae5; color:#065f46; }
-  .badge-retirado { background:#f3f4f6; color:#6b7280; }
+  .badge-retirado,.badge-inactivo { background:#f3f4f6; color:#6b7280; }
   .badge-mantenimiento { background:#fef3c7; color:#92400e; }
+  .badge-correctivo { background:#fee2e2; color:#991b1b; }
+  .badge-preventivo { background:#d1fae5; color:#065f46; }
+  .badge-calibracion { background:#dbeafe; color:#1e40af; }
+  .badge-inspeccion  { background:#fef9c3; color:#854d0e; }
+  .badge-exitoso { background:#d1fae5; color:#065f46; }
+  .badge-fallido { background:#fee2e2; color:#991b1b; }
+  .badge-parcial { background:#fef3c7; color:#92400e; }
   .footer { margin-top:40px; padding-top:16px; border-top:1px solid #e5e7eb; font-size:11px; color:#9ca3af; display:flex; justify-content:space-between; }
   @media print { body { padding:20px; } }
 </style>
@@ -260,7 +240,7 @@ export default function Dispositivos() {
       <div class="item"><div class="item-label">Firmware</div><div class="item-value">${hv.version_firmware || 'N/A'}</div></div>
       <div class="item"><div class="item-label">Registrado</div><div class="item-value">${hv.registrado_en ? new Date(hv.registrado_en).toLocaleDateString('es-CO') : '—'}</div></div>
       <div class="item"><div class="item-label">Ultima conexion</div><div class="item-value">${hv.ultima_conexion ? new Date(hv.ultima_conexion).toLocaleDateString('es-CO') : 'Nunca'}</div></div>
-      <div class="item"><div class="item-label">Total despliegues</div><div class="item-value">${hv.total_despliegues}</div></div>
+      <div class="item"><div class="item-label">Mantenimientos</div><div class="item-value">${hv.total_mantenimientos || 0}</div></div>
     </div>
   </div>
   ${config ? `
@@ -274,6 +254,24 @@ export default function Dispositivos() {
       <div class="item"><div class="item-label">Limite maximo</div><div class="item-value">${config.limite_maximo != null ? config.limite_maximo : 'Defecto'}</div></div>
       <div class="item"><div class="item-label">Parcela</div><div class="item-value">${config.parcela_nombre || 'Sin asignar'}</div></div>
     </div>
+  </div>` : ''}
+  ${mantos.length > 0 ? `
+  <div class="section">
+    <div class="section-title">Historial de Mantenimientos (${mantos.length})</div>
+    <table class="table">
+      <thead><tr><th>Tipo</th><th>Titulo</th><th>Causa</th><th>Acciones</th><th>Resultado</th><th>Tecnico</th><th>Fecha</th></tr></thead>
+      <tbody>${mantos.map(m => `
+        <tr>
+          <td><span class="badge badge-${m.tipo}">${m.tipo}</span></td>
+          <td>${m.titulo}</td>
+          <td>${m.causa || '—'}</td>
+          <td>${m.acciones || '—'}</td>
+          <td><span class="badge badge-${m.resultado}">${m.resultado}</span></td>
+          <td>${m.tecnico || '—'}</td>
+          <td>${m.fecha_inicio ? new Date(m.fecha_inicio).toLocaleDateString('es-CO') : '—'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
   </div>` : ''}
   ${historial.length > 0 ? `
   <div class="section">
@@ -322,14 +320,14 @@ export default function Dispositivos() {
     if (!selected) return
     setEditMsg('')
     const payload = {}
-    if (editForm.estado)                    payload.estado             = editForm.estado
-    if (editForm.limite_minimo !== '')       payload.limite_minimo      = parseFloat(editForm.limite_minimo)
-    if (editForm.limite_maximo !== '')       payload.limite_maximo      = parseFloat(editForm.limite_maximo)
-    if (editForm.parcela_id !== '')          payload.parcela_id         = parseInt(editForm.parcela_id)
-    if (editForm.parcela_nombre)             payload.parcela_nombre     = editForm.parcela_nombre
-    if (editForm.posicion_campo)             payload.posicion_campo     = editForm.posicion_campo
-    if (editForm.intervalo_muestreo !== '')  payload.intervalo_muestreo = parseInt(editForm.intervalo_muestreo)
-    if (editForm.umbral_bateria !== '')      payload.umbral_bateria     = parseInt(editForm.umbral_bateria)
+    if (editForm.estado)                   payload.estado             = editForm.estado
+    if (editForm.limite_minimo !== '')      payload.limite_minimo      = parseFloat(editForm.limite_minimo)
+    if (editForm.limite_maximo !== '')      payload.limite_maximo      = parseFloat(editForm.limite_maximo)
+    if (editForm.parcela_id !== '')         payload.parcela_id         = parseInt(editForm.parcela_id)
+    if (editForm.parcela_nombre)            payload.parcela_nombre     = editForm.parcela_nombre
+    if (editForm.posicion_campo)            payload.posicion_campo     = editForm.posicion_campo
+    if (editForm.intervalo_muestreo !== '') payload.intervalo_muestreo = parseInt(editForm.intervalo_muestreo)
+    if (editForm.umbral_bateria !== '')     payload.umbral_bateria     = parseInt(editForm.umbral_bateria)
     try {
       await dispositivosAPI.actualizar(selected.id, payload)
       setEditMsg('Configuracion actualizada correctamente')
@@ -341,10 +339,11 @@ export default function Dispositivos() {
     e.preventDefault()
     const errores = validarCampos(form)
     if (Object.keys(errores).length > 0) { setFormErrores(errores); setFormMsg('Corrige los errores'); return }
+    if (!form.tipo_dispositivo_id) { setFormMsg('Selecciona un tipo de dispositivo'); return }
     setFormLoading(true); setFormMsg('')
     try {
       const payload = {
-        tipo_dispositivo_id: form.tipo_dispositivo_id,
+        tipo_dispositivo_id: parseInt(form.tipo_dispositivo_id),
         id_logico:           form.id_logico,
         numero_serial:       form.numero_serial,
         version_firmware:    form.version_firmware,
@@ -360,13 +359,12 @@ export default function Dispositivos() {
       await load()
       setTimeout(() => { setShowForm(false); setFormMsg('') }, 1500)
     } catch(e) {
-      const detail = e?.response?.data?.detail
-      setFormMsg(detail || 'Error al registrar el sensor')
+      setFormMsg(e?.response?.data?.detail || 'Error al registrar el sensor')
     } finally { setFormLoading(false) }
   }
 
   const getTipo    = (id) => tipos.find(t => t.id === id)
-  const categorias = ['todos', ...new Set(tipos.map(t => t.categoria))]
+  const categorias = ['todos', ...new Set(tipos.map(t => t.categoria).filter(Boolean))]
 
   const filtered = dispositivos.filter(d => {
     const tipo     = getTipo(d.tipo_dispositivo_id)
@@ -380,14 +378,17 @@ export default function Dispositivos() {
 
   const activos       = dispositivos.filter(d => d.estado === 'activo').length
   const inactivos     = dispositivos.filter(d => d.estado === 'inactivo').length
-  const mantenimiento = dispositivos.filter(d => d.estado === 'mantenimiento').length
+  const enMant        = dispositivos.filter(d => d.estado === 'mantenimiento').length
 
   return (
     <div style={styles.wrapper} className="animate-fade">
+      {/* Header */}
       <div style={styles.header}>
         <div>
           <h1 style={styles.title}>Dispositivos IoT</h1>
-          <p style={styles.subtitle}>{dispositivos.length} sensores · {activos} activos · {inactivos} inactivos · {mantenimiento} en mantenimiento</p>
+          <p style={styles.subtitle}>
+            {dispositivos.length} sensores · {activos} activos · {inactivos} inactivos · {enMant} en mantenimiento
+          </p>
         </div>
         <button onClick={() => setShowForm(!showForm)} style={{
           ...styles.addBtn,
@@ -395,36 +396,51 @@ export default function Dispositivos() {
           color:       showForm ? '#f87171' : '#22c55e',
           borderColor: showForm ? 'rgba(248,113,113,0.3)' : 'rgba(34,197,94,0.25)',
         }}>
-          {showForm ? 'Cancelar' : '+ Registrar sensor'}
+          {showForm ? '✕ Cancelar' : '+ Registrar sensor'}
         </button>
       </div>
 
-      {/* Formulario */}
+      {/* Formulario registro */}
       {showForm && (
         <div style={styles.formCard} className="animate-fade">
           <div style={styles.formTitle}>Registrar nuevo sensor</div>
-          <p style={styles.formDesc}>ID logico y serial se generan automaticamente. Puedes asignar una parcela y configurar limites desde el inicio.</p>
+          <p style={styles.formDesc}>
+            Selecciona el tipo de dispositivo, completa el ID lógico y serial, y opcionalmente asigna una parcela.
+          </p>
           <form onSubmit={handleRegistrar} style={styles.formGrid}>
-            <div style={styles.fieldGroup}>
-              <label style={styles.label}>Tipo de sensor</label>
+            <div style={{...styles.fieldGroup, gridColumn:'1/-1'}}>
+              <label style={styles.label}>Tipo de dispositivo *</label>
               <select value={form.tipo_dispositivo_id}
-                onChange={e => handleTipoChange(e.target.value)} style={styles.input}>
-                {TIPO_OPCIONES.map(t => <option key={t.id} value={t.id}>{t.nombre} ({t.categoria})</option>)}
+                onChange={e => setForm(p=>({...p, tipo_dispositivo_id: e.target.value}))}
+                style={styles.input}>
+                <option value="">— Selecciona un tipo —</option>
+                {categorias.filter(c=>c!=='todos').map(cat => (
+                  <optgroup key={cat} label={cat.charAt(0).toUpperCase()+cat.slice(1).replace('_',' ')}>
+                    {tipos.filter(t=>t.categoria===cat).map(t => (
+                      <option key={t.id} value={t.id}>{t.nombre}</option>
+                    ))}
+                  </optgroup>
+                ))}
               </select>
             </div>
             <div style={styles.fieldGroup}>
-              <label style={styles.label}>ID Logico * <span style={styles.hint}>formato: PREFIJO_NN</span></label>
-              <input placeholder="ej: SOIL_HUM_02" value={form.id_logico}
+              <label style={styles.label}>ID Lógico * <span style={styles.hint}>Ej: SOIL_HUM_02</span></label>
+              <input placeholder="SOIL_HUM_02" value={form.id_logico}
                 onChange={e => { setForm(p=>({...p,id_logico:e.target.value.toUpperCase()})); setFormErrores(p=>({...p,id_logico:''})) }}
                 style={{...styles.input, borderColor: formErrores.id_logico ? '#f87171' : 'rgba(34,197,94,0.15)'}} />
               {formErrores.id_logico && <div style={styles.errorMsg}>{formErrores.id_logico}</div>}
             </div>
             <div style={styles.fieldGroup}>
               <label style={styles.label}>Serial * <span style={styles.hint}>SN-ABC-XYZ-001</span></label>
-              <input placeholder="ej: SN-HUM-CAP-002" value={form.numero_serial}
+              <input placeholder="SN-HUM-CAP-002" value={form.numero_serial}
                 onChange={e => { setForm(p=>({...p,numero_serial:e.target.value.toUpperCase()})); setFormErrores(p=>({...p,numero_serial:''})) }}
                 style={{...styles.input, borderColor: formErrores.numero_serial ? '#f87171' : 'rgba(34,197,94,0.15)'}} />
               {formErrores.numero_serial && <div style={styles.errorMsg}>{formErrores.numero_serial}</div>}
+            </div>
+            <div style={styles.fieldGroup}>
+              <label style={styles.label}>Firmware</label>
+              <input placeholder="1.0.0" value={form.version_firmware}
+                onChange={e => setForm(p=>({...p,version_firmware:e.target.value}))} style={styles.input} />
             </div>
             <div style={styles.fieldGroup}>
               <label style={styles.label}>Parcela asignada</label>
@@ -435,23 +451,18 @@ export default function Dispositivos() {
               </select>
             </div>
             <div style={styles.fieldGroup}>
-              <label style={styles.label}>Posicion en campo</label>
+              <label style={styles.label}>Posición en campo</label>
               <input placeholder="ej: Sector norte, fila 3" value={form.posicion_campo}
                 onChange={e => setForm(p=>({...p,posicion_campo:e.target.value}))} style={styles.input} />
             </div>
             <div style={styles.fieldGroup}>
-              <label style={styles.label}>Firmware</label>
-              <input placeholder="1.0.0" value={form.version_firmware}
-                onChange={e => setForm(p=>({...p,version_firmware:e.target.value}))} style={styles.input} />
-            </div>
-            <div style={styles.fieldGroup}>
-              <label style={styles.label}>Limite minimo</label>
+              <label style={styles.label}>Límite mínimo</label>
               <input type="number" step="0.1" placeholder="Por defecto del tipo"
                 value={form.limite_minimo}
                 onChange={e => setForm(p=>({...p,limite_minimo:e.target.value}))} style={styles.input} />
             </div>
             <div style={styles.fieldGroup}>
-              <label style={styles.label}>Limite maximo</label>
+              <label style={styles.label}>Límite máximo</label>
               <input type="number" step="0.1" placeholder="Por defecto del tipo"
                 value={form.limite_maximo}
                 onChange={e => setForm(p=>({...p,limite_maximo:e.target.value}))} style={styles.input} />
@@ -487,7 +498,7 @@ export default function Dispositivos() {
         <select value={categoriaFiltro} onChange={e => setCategoriaFiltro(e.target.value)} style={styles.select}>
           <option value="todos">Todas las categorias</option>
           {categorias.filter(c=>c!=='todos').map(cat => (
-            <option key={cat} value={cat}>{cat.charAt(0).toUpperCase()+cat.slice(1)}</option>
+            <option key={cat} value={cat}>{cat.charAt(0).toUpperCase()+cat.slice(1).replace('_',' ')}</option>
           ))}
         </select>
         <select value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)} style={styles.select}>
@@ -507,23 +518,24 @@ export default function Dispositivos() {
             <div style={{padding:'40px',textAlign:'center',color:'#4b5563'}}>Cargando sensores...</div>
           ) : filtered.length === 0 ? (
             <div style={{padding:'40px',textAlign:'center',color:'#4b5563',fontSize:'13px'}}>
+              <div style={{fontSize:'28px',marginBottom:'8px'}}>📡</div>
               <div>No hay sensores registrados</div>
-              <div style={{marginTop:'6px',fontSize:'12px'}}>Haz clic en "Registrar sensor" para agregar el primero</div>
+              <div style={{marginTop:'6px',fontSize:'12px'}}>Haz clic en "+ Registrar sensor" para agregar el primero</div>
             </div>
           ) : (
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th>ID Logico</th><th>Tipo</th><th>Parcela</th>
-                    <th>Serial</th><th>Estado</th><th>Limites</th>
+                    <th>ID Lógico</th><th>Categoría</th><th>Tipo</th>
+                    <th>Parcela</th><th>Estado</th><th>Límites</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((d) => {
+                  {filtered.map(d => {
                     const tipo     = getTipo(d.tipo_dispositivo_id)
                     const estColor = ESTADO_COLOR[d.estado] || '#6b7280'
-                    const catStyle = CAT_STYLES[tipo?.categoria] || CAT_STYLES.infra
+                    const catStyle = CAT_STYLES[tipo?.categoria] || CAT_STYLES.infraestructura
                     const config   = d.configuracion
                     return (
                       <tr key={d.id} onClick={() => handleSelect(d)} style={{
@@ -533,13 +545,15 @@ export default function Dispositivos() {
                         <td><span style={{fontFamily:'monospace',color:'#4ade80',fontSize:'12px'}}>{d.id_logico}</span></td>
                         <td>
                           <span style={{...styles.catBadge,color:catStyle.color,background:catStyle.bg,border:`1px solid ${catStyle.border}`}}>
-                            {tipo?.categoria || '—'}
+                            {tipo?.categoria?.replace('_',' ') || '—'}
                           </span>
+                        </td>
+                        <td style={{fontSize:'11px',color:'#9ca3af',maxWidth:'140px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                          {tipo?.nombre || '—'}
                         </td>
                         <td style={{fontSize:'11px',color:'#9ca3af'}}>
                           {config?.parcela_nombre || <span style={{color:'#374151'}}>Sin asignar</span>}
                         </td>
-                        <td style={{color:'#6b7280',fontSize:'11px',fontFamily:'monospace'}}>{d.numero_serial}</td>
                         <td>
                           <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
                             <div style={{width:'7px',height:'7px',borderRadius:'50%',background:estColor}}/>
@@ -573,24 +587,31 @@ export default function Dispositivos() {
             </div>
 
             <div style={styles.tabs}>
-              {['info','editar','hoja-vida'].map(tab => (
-                <button key={tab} onClick={() => {
-                  setActiveTab(tab)
-                  if (tab === 'hoja-vida') handleCargarHojaVida()
-                }} style={{...styles.tab, ...(activeTab===tab ? styles.tabActive : {})}}>
-                  {tab==='info'?'Info':tab==='editar'?'Editar':'Hoja de Vida'}
+              {[
+                { id:'info',          label:'Info'          },
+                { id:'editar',        label:'Editar'        },
+                { id:'mantenimiento', label:'Mant.'         },
+                { id:'hoja-vida',     label:'Hoja de Vida'  },
+              ].map(t => (
+                <button key={t.id} onClick={() => {
+                  setActiveTab(t.id)
+                  if (t.id === 'hoja-vida')     handleCargarHojaVida()
+                  if (t.id === 'mantenimiento') handleCargarMantenimientos()
+                }} style={{...styles.tab, ...(activeTab===t.id ? styles.tabActive : {})}}>
+                  {t.label}
                 </button>
               ))}
             </div>
 
+            {/* Tab Info */}
             {activeTab === 'info' && (
               <>
                 <div style={styles.detailGrid}>
                   {[
-                    {label:'Estado',   value:selected.estado, color:ESTADO_COLOR[selected.estado]},
+                    {label:'Estado',   value:selected.estado,                                           color:ESTADO_COLOR[selected.estado]},
                     {label:'Firmware', value:selected.version_firmware||'N/A'},
-                    {label:'Parcela',  value:selected.configuracion?.parcela_nombre||'Sin asignar', color:'#4ade80'},
-                    {label:'Posicion', value:selected.configuracion?.posicion_campo||'—'},
+                    {label:'Parcela',  value:selected.configuracion?.parcela_nombre||'Sin asignar',     color:'#4ade80'},
+                    {label:'Posición', value:selected.configuracion?.posicion_campo||'—'},
                     {label:'Lim. Min', value:selected.configuracion?.limite_minimo!=null?selected.configuracion.limite_minimo:'Por defecto'},
                     {label:'Lim. Max', value:selected.configuracion?.limite_maximo!=null?selected.configuracion.limite_maximo:'Por defecto'},
                   ].map(item => (
@@ -602,7 +623,7 @@ export default function Dispositivos() {
                 </div>
                 {metricas && (
                   <div style={styles.metricasCard}>
-                    <div style={styles.metricasTitle}>Metricas permitidas</div>
+                    <div style={styles.metricasTitle}>Métricas permitidas</div>
                     <div style={styles.metricasList}>
                       {metricas.metricas_permitidas?.map(m => (
                         <span key={m} style={styles.metricaTag}>{m}</span>
@@ -613,6 +634,7 @@ export default function Dispositivos() {
               </>
             )}
 
+            {/* Tab Editar */}
             {activeTab === 'editar' && (
               <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
                 <div style={styles.fieldGroup}>
@@ -634,20 +656,18 @@ export default function Dispositivos() {
                   </select>
                 </div>
                 <div style={styles.fieldGroup}>
-                  <label style={styles.label}>Posicion en campo</label>
+                  <label style={styles.label}>Posición en campo</label>
                   <input placeholder="ej: Sector norte" value={editForm.posicion_campo}
                     onChange={e => setEditForm(p=>({...p,posicion_campo:e.target.value}))} style={styles.input} />
                 </div>
                 <div style={styles.fieldGroup}>
-                  <label style={styles.label}>Limite minimo</label>
-                  <input type="number" step="0.1" placeholder="Por defecto del tipo"
-                    value={editForm.limite_minimo}
+                  <label style={styles.label}>Límite mínimo</label>
+                  <input type="number" step="0.1" value={editForm.limite_minimo}
                     onChange={e => setEditForm(p=>({...p,limite_minimo:e.target.value}))} style={styles.input} />
                 </div>
                 <div style={styles.fieldGroup}>
-                  <label style={styles.label}>Limite maximo</label>
-                  <input type="number" step="0.1" placeholder="Por defecto del tipo"
-                    value={editForm.limite_maximo}
+                  <label style={styles.label}>Límite máximo</label>
+                  <input type="number" step="0.1" value={editForm.limite_maximo}
                     onChange={e => setEditForm(p=>({...p,limite_maximo:e.target.value}))} style={styles.input} />
                 </div>
                 <div style={styles.fieldGroup}>
@@ -656,7 +676,7 @@ export default function Dispositivos() {
                     onChange={e => setEditForm(p=>({...p,intervalo_muestreo:e.target.value}))} style={styles.input} />
                 </div>
                 <div style={styles.fieldGroup}>
-                  <label style={styles.label}>Umbral bateria (%)</label>
+                  <label style={styles.label}>Umbral batería (%)</label>
                   <input type="number" placeholder="20" value={editForm.umbral_bateria}
                     onChange={e => setEditForm(p=>({...p,umbral_bateria:e.target.value}))} style={styles.input} />
                 </div>
@@ -665,12 +685,131 @@ export default function Dispositivos() {
               </div>
             )}
 
+            {/* Tab Mantenimiento */}
+            {activeTab === 'mantenimiento' && (
+              <div style={{display:'flex',flexDirection:'column',gap:'12px'}}>
+                <form onSubmit={handleRegistrarMantenimiento} style={styles.miniForm}>
+                  <div style={styles.miniFormTitle}>🔧 Registrar mantenimiento</div>
+                  <div style={styles.fieldGroup}>
+                    <label style={styles.label}>Tipo</label>
+                    <select value={mantForm.tipo}
+                      onChange={e => setMantForm(p=>({...p,tipo:e.target.value}))} style={styles.input}>
+                      <option value="preventivo">Preventivo</option>
+                      <option value="correctivo">Correctivo</option>
+                      <option value="calibracion">Calibración</option>
+                      <option value="inspeccion">Inspección</option>
+                    </select>
+                  </div>
+                  <div style={styles.fieldGroup}>
+                    <label style={styles.label}>Título *</label>
+                    <input placeholder="ej: Limpieza de contactos" value={mantForm.titulo}
+                      onChange={e => setMantForm(p=>({...p,titulo:e.target.value}))} style={styles.input} />
+                  </div>
+                  <div style={styles.fieldGroup}>
+                    <label style={styles.label}>Causa del mantenimiento</label>
+                    <input placeholder="ej: Lectura fuera de rango" value={mantForm.causa}
+                      onChange={e => setMantForm(p=>({...p,causa:e.target.value}))} style={styles.input} />
+                  </div>
+                  <div style={styles.fieldGroup}>
+                    <label style={styles.label}>Descripción</label>
+                    <input placeholder="Descripción detallada" value={mantForm.descripcion}
+                      onChange={e => setMantForm(p=>({...p,descripcion:e.target.value}))} style={styles.input} />
+                  </div>
+                  <div style={styles.fieldGroup}>
+                    <label style={styles.label}>Acciones realizadas</label>
+                    <input placeholder="ej: Se limpió y recalibró el sensor" value={mantForm.acciones}
+                      onChange={e => setMantForm(p=>({...p,acciones:e.target.value}))} style={styles.input} />
+                  </div>
+                  <div style={styles.fieldGroup}>
+                    <label style={styles.label}>Resultado</label>
+                    <select value={mantForm.resultado}
+                      onChange={e => setMantForm(p=>({...p,resultado:e.target.value}))} style={styles.input}>
+                      <option value="exitoso">Exitoso</option>
+                      <option value="parcial">Parcial</option>
+                      <option value="fallido">Fallido</option>
+                      <option value="pendiente">Pendiente</option>
+                    </select>
+                  </div>
+                  <div style={styles.fieldGroup}>
+                    <label style={styles.label}>Técnico responsable</label>
+                    <input placeholder="Nombre del técnico" value={mantForm.tecnico}
+                      onChange={e => setMantForm(p=>({...p,tecnico:e.target.value}))} style={styles.input} />
+                  </div>
+                  <div style={styles.fieldGroup}>
+                    <label style={styles.label}>Costo (opcional)</label>
+                    <input type="number" step="0.01" placeholder="0.00" value={mantForm.costo}
+                      onChange={e => setMantForm(p=>({...p,costo:e.target.value}))} style={styles.input} />
+                  </div>
+                  <div style={styles.fieldGroup}>
+                    <label style={styles.label}>Fecha inicio</label>
+                    <input type="datetime-local" value={mantForm.fecha_inicio}
+                      onChange={e => setMantForm(p=>({...p,fecha_inicio:e.target.value}))} style={styles.input} />
+                  </div>
+                  <div style={styles.fieldGroup}>
+                    <label style={styles.label}>Fecha fin</label>
+                    <input type="datetime-local" value={mantForm.fecha_fin}
+                      onChange={e => setMantForm(p=>({...p,fecha_fin:e.target.value}))} style={styles.input} />
+                  </div>
+                  <div style={styles.fieldGroup}>
+                    <label style={styles.label}>Próxima revisión</label>
+                    <input type="datetime-local" value={mantForm.proxima_revision}
+                      onChange={e => setMantForm(p=>({...p,proxima_revision:e.target.value}))} style={styles.input} />
+                  </div>
+                  <button type="submit" disabled={mantLoading} style={styles.submitBtn}>
+                    {mantLoading ? 'Registrando...' : 'Registrar mantenimiento'}
+                  </button>
+                  {mantMsg && <div style={{fontSize:'12px',color:mantMsg.includes('Error')?'#f87171':'#22c55e'}}>{mantMsg}</div>}
+                </form>
+
+                {/* Historial */}
+                <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
+                  <div style={{fontSize:'11px',color:'#6b7280',textTransform:'uppercase',letterSpacing:'0.6px'}}>
+                    Historial ({mantenimientos.length})
+                  </div>
+                  {mantenimientos.length === 0 ? (
+                    <div style={{textAlign:'center',padding:'20px',color:'#4b5563',fontSize:'12px'}}>
+                      Sin mantenimientos registrados
+                    </div>
+                  ) : mantenimientos.map(m => (
+                    <div key={m.id} style={{
+                      background:'rgba(6,12,7,0.6)', borderRadius:'8px',
+                      padding:'10px 12px', border:'1px solid rgba(34,197,94,0.08)',
+                      borderLeft:`3px solid ${TIPO_COLOR[m.tipo]||'#6b7280'}`
+                    }}>
+                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:'4px'}}>
+                        <span style={{fontSize:'11px',fontWeight:700,color:TIPO_COLOR[m.tipo],textTransform:'uppercase'}}>
+                          {m.tipo}
+                        </span>
+                        <span style={{fontSize:'10px',fontWeight:600,color:RESULT_COLOR[m.resultado]}}>
+                          {m.resultado}
+                        </span>
+                      </div>
+                      <div style={{fontSize:'13px',fontWeight:600,color:'#f0fdf4',marginBottom:'4px'}}>{m.titulo}</div>
+                      {m.causa       && <div style={{fontSize:'11px',color:'#9ca3af'}}>Causa: {m.causa}</div>}
+                      {m.acciones    && <div style={{fontSize:'11px',color:'#9ca3af'}}>Acciones: {m.acciones}</div>}
+                      {m.tecnico     && <div style={{fontSize:'11px',color:'#4ade80'}}>Técnico: {m.tecnico}</div>}
+                      {m.costo       && <div style={{fontSize:'11px',color:'#6b7280'}}>Costo: ${m.costo}</div>}
+                      <div style={{fontSize:'10px',color:'#4b5563',marginTop:'4px'}}>
+                        {m.fecha_inicio ? new Date(m.fecha_inicio).toLocaleString('es-CO') : '—'}
+                        {m.proxima_revision && ` · Próx. revisión: ${new Date(m.proxima_revision).toLocaleDateString('es-CO')}`}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Tab Hoja de Vida */}
             {activeTab === 'hoja-vida' && (
               <div style={{display:'flex',flexDirection:'column',gap:'12px'}}>
                 {!hojaVida ? (
-                  <div style={{textAlign:'center',padding:'30px',color:'#4b5563',fontSize:'13px'}}>Cargando hoja de vida...</div>
+                  <div style={{textAlign:'center',padding:'30px',color:'#4b5563',fontSize:'13px'}}>
+                    Cargando hoja de vida...
+                  </div>
                 ) : hojaVida.error ? (
-                  <div style={{textAlign:'center',padding:'30px',color:'#f87171',fontSize:'13px'}}>Error cargando la hoja de vida.</div>
+                  <div style={{textAlign:'center',padding:'30px',color:'#f87171',fontSize:'13px'}}>
+                    Error cargando la hoja de vida.
+                  </div>
                 ) : (
                   <>
                     <button onClick={descargarHojaVida} style={{
@@ -687,16 +826,17 @@ export default function Dispositivos() {
                       </svg>
                       Descargar / Imprimir PDF
                     </button>
+
                     <div style={styles.hvSection}>
                       <div style={styles.hvTitle}>Resumen</div>
                       <div style={styles.detailGrid}>
                         {[
-                          {label:'Tipo',           value:hojaVida.tipo},
-                          {label:'Categoria',      value:hojaVida.categoria},
-                          {label:'Registrado',     value:hojaVida.registrado_en?new Date(hojaVida.registrado_en).toLocaleDateString('es-CO'):'—'},
-                          {label:'Cambios estado', value:hojaVida.total_cambios_estado},
-                          {label:'Despliegues',    value:hojaVida.total_despliegues},
-                          {label:'Ultima conexion',value:hojaVida.ultima_conexion?new Date(hojaVida.ultima_conexion).toLocaleDateString('es-CO'):'Nunca'},
+                          {label:'Tipo',            value:hojaVida.tipo},
+                          {label:'Categoría',       value:hojaVida.categoria},
+                          {label:'Registrado',      value:hojaVida.registrado_en?new Date(hojaVida.registrado_en).toLocaleDateString('es-CO'):'—'},
+                          {label:'Cambios estado',  value:hojaVida.total_cambios_estado},
+                          {label:'Despliegues',     value:hojaVida.total_despliegues},
+                          {label:'Mantenimientos',  value:hojaVida.total_mantenimientos||0},
                         ].map(item => (
                           <div key={item.label} style={styles.detailItem}>
                             <div style={styles.detailLabel}>{item.label}</div>
@@ -705,11 +845,33 @@ export default function Dispositivos() {
                         ))}
                       </div>
                     </div>
+
+                    {hojaVida.mantenimientos?.length > 0 && (
+                      <div style={styles.hvSection}>
+                        <div style={styles.hvTitle}>Mantenimientos ({hojaVida.mantenimientos.length})</div>
+                        <div style={{display:'flex',flexDirection:'column',gap:'6px',maxHeight:'200px',overflowY:'auto'}}>
+                          {hojaVida.mantenimientos.map((m,i) => (
+                            <div key={i} style={{...styles.hvItem, borderLeft:`3px solid ${TIPO_COLOR[m.tipo]||'#6b7280'}`}}>
+                              <div style={{display:'flex',justifyContent:'space-between'}}>
+                                <span style={{fontSize:'11px',fontWeight:700,color:TIPO_COLOR[m.tipo]}}>{m.tipo}</span>
+                                <span style={{fontSize:'10px',color:RESULT_COLOR[m.resultado]}}>{m.resultado}</span>
+                              </div>
+                              <div style={{fontSize:'12px',fontWeight:600,color:'#f0fdf4'}}>{m.titulo}</div>
+                              {m.tecnico && <div style={{fontSize:'10px',color:'#4ade80'}}>Técnico: {m.tecnico}</div>}
+                              <div style={{fontSize:'10px',color:'#4b5563'}}>
+                                {m.fecha_inicio?new Date(m.fecha_inicio).toLocaleDateString('es-CO'):'—'}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {hojaVida.historial_estados?.length > 0 && (
                       <div style={styles.hvSection}>
                         <div style={styles.hvTitle}>Historial de estados ({hojaVida.historial_estados.length})</div>
                         <div style={{display:'flex',flexDirection:'column',gap:'6px',maxHeight:'160px',overflowY:'auto'}}>
-                          {hojaVida.historial_estados.map((h, i) => (
+                          {hojaVida.historial_estados.map((h,i) => (
                             <div key={i} style={styles.hvItem}>
                               <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
                                 <span style={{fontSize:'11px',color:'#6b7280'}}>{h.estado_anterior||'inicio'}</span>
@@ -724,11 +886,12 @@ export default function Dispositivos() {
                         </div>
                       </div>
                     )}
+
                     {hojaVida.despliegues?.length > 0 && (
                       <div style={styles.hvSection}>
                         <div style={styles.hvTitle}>Despliegues ({hojaVida.despliegues.length})</div>
                         <div style={{display:'flex',flexDirection:'column',gap:'6px',maxHeight:'160px',overflowY:'auto'}}>
-                          {hojaVida.despliegues.map((d, i) => (
+                          {hojaVida.despliegues.map((d,i) => (
                             <div key={i} style={styles.hvItem}>
                               <div style={{display:'flex',justifyContent:'space-between'}}>
                                 <span style={{fontSize:'12px',fontWeight:600,color:'#f0fdf4'}}>Lote: {d.lote_id}</span>
@@ -745,16 +908,17 @@ export default function Dispositivos() {
                         </div>
                       </div>
                     )}
+
                     {hojaVida.configuracion && (
                       <div style={styles.hvSection}>
-                        <div style={styles.hvTitle}>Configuracion actual</div>
+                        <div style={styles.hvTitle}>Configuración actual</div>
                         <div style={styles.detailGrid}>
                           {[
                             {label:'Intervalo',   value:`${hojaVida.configuracion.intervalo_muestreo||300}s`},
                             {label:'Protocolo',   value:hojaVida.configuracion.protocolo_transmision||'HTTP'},
-                            {label:'Bateria min', value:`${hojaVida.configuracion.umbral_bateria||20}%`},
-                            {label:'Lim. Min',    value:hojaVida.configuracion.limite_minimo??'Defecto'},
-                            {label:'Lim. Max',    value:hojaVida.configuracion.limite_maximo??'Defecto'},
+                            {label:'Batería min', value:`${hojaVida.configuracion.umbral_bateria||20}%`},
+                            {label:'Lím. Min',    value:hojaVida.configuracion.limite_minimo??'Defecto'},
+                            {label:'Lím. Max',    value:hojaVida.configuracion.limite_maximo??'Defecto'},
                             {label:'Parcela',     value:hojaVida.configuracion.parcela_nombre||'Sin asignar'},
                           ].map(item => (
                             <div key={item.label} style={styles.detailItem}>
@@ -777,47 +941,49 @@ export default function Dispositivos() {
 }
 
 const styles = {
-  wrapper:      { padding: '32px', maxWidth: '1200px' },
-  header:       { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' },
-  title:        { fontFamily: "'Syne', sans-serif", fontSize: '26px', fontWeight: 700, color: '#f0fdf4' },
-  subtitle:     { fontSize: '13px', color: '#6b7280', marginTop: '4px' },
-  addBtn:       { display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 16px', borderRadius: '10px', border: '1px solid', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", transition: 'all 0.2s' },
-  formCard:     { background: '#0d1510', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '16px', padding: '22px 24px', marginBottom: '20px' },
-  formTitle:    { fontFamily: "'Syne', sans-serif", fontSize: '14px', fontWeight: 600, color: '#f0fdf4', marginBottom: '6px' },
-  formDesc:     { fontSize: '12px', color: '#6b7280', marginBottom: '18px', lineHeight: 1.6 },
-  formGrid:     { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' },
-  fieldGroup:   { display: 'flex', flexDirection: 'column', gap: '5px' },
-  label:        { fontSize: '11px', fontWeight: 500, color: '#86efac', letterSpacing: '0.4px' },
-  hint:         { color: '#4b5563', fontWeight: 400, fontSize: '10px' },
-  input:        { padding: '9px 12px', background: 'rgba(6,12,7,0.8)', border: '1px solid rgba(34,197,94,0.15)', borderRadius: '8px', color: '#f0fdf4', fontSize: '13px', fontFamily: "'DM Sans', sans-serif" },
-  errorMsg:     { fontSize: '11px', color: '#f87171', marginTop: '3px' },
-  submitBtn:    { width: '100%', padding: '10px', background: 'linear-gradient(135deg, #16a34a, #15803d)', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" },
-  filters:      { display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' },
-  searchWrap:   { position: 'relative', flex: 1, minWidth: '200px' },
-  searchIcon:   { position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', color: '#4ade80' },
-  search:       { width: '100%', padding: '9px 14px 9px 34px', background: '#0d1510', border: '1px solid rgba(34,197,94,0.15)', borderRadius: '8px', color: '#f0fdf4', fontSize: '13px', fontFamily: "'DM Sans', sans-serif" },
-  select:       { padding: '9px 12px', background: '#0d1510', border: '1px solid rgba(34,197,94,0.15)', borderRadius: '8px', color: '#9ca3af', fontSize: '13px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" },
-  countTag:     { background: 'rgba(34,197,94,0.08)', color: '#4ade80', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', border: '1px solid rgba(34,197,94,0.15)' },
-  catBadge:     { padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 600 },
-  layout:       { display: 'flex', gap: '16px' },
-  tableCard:    { flex: 1, background: '#0d1510', border: '1px solid rgba(34,197,94,0.1)', borderRadius: '16px', overflow: 'hidden' },
-  detailPanel:  { width: '300px', background: '#0d1510', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '16px', padding: '18px', height: 'fit-content', maxHeight: '90vh', overflowY: 'auto' },
-  detailHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' },
-  detailId:     { fontFamily: 'monospace', color: '#4ade80', fontSize: '14px', fontWeight: 700 },
-  detailSerial: { fontSize: '11px', color: '#6b7280', marginTop: '2px' },
-  closeBtn:     { background: 'none', border: 'none', color: '#4b5563', cursor: 'pointer', fontSize: '14px' },
-  tabs:         { display: 'flex', gap: '3px', marginBottom: '14px', background: 'rgba(6,12,7,0.6)', borderRadius: '8px', padding: '4px' },
-  tab:          { flex: 1, padding: '6px', borderRadius: '6px', border: 'none', background: 'transparent', color: '#6b7280', fontSize: '11px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", transition: 'all 0.15s' },
-  tabActive:    { background: 'rgba(34,197,94,0.15)', color: '#22c55e' },
-  detailGrid:   { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' },
-  detailItem:   { background: 'rgba(6,12,7,0.6)', borderRadius: '8px', padding: '8px 10px' },
-  detailLabel:  { fontSize: '10px', color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '3px' },
-  detailValue:  { fontSize: '12px', fontWeight: 600, color: '#f0fdf4' },
-  metricasCard: { background: 'rgba(6,12,7,0.6)', borderRadius: '8px', padding: '10px', marginBottom: '10px' },
-  metricasTitle:{ fontSize: '11px', color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '8px' },
-  metricasList: { display: 'flex', flexWrap: 'wrap', gap: '5px' },
-  metricaTag:   { background: 'rgba(34,197,94,0.1)', color: '#4ade80', padding: '2px 8px', borderRadius: '4px', fontSize: '11px' },
-  hvSection:    { background: 'rgba(6,12,7,0.5)', borderRadius: '10px', padding: '12px', border: '1px solid rgba(34,197,94,0.08)' },
-  hvTitle:      { fontFamily: "'Syne', sans-serif", fontSize: '12px', fontWeight: 600, color: '#86efac', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.6px' },
-  hvItem:       { background: 'rgba(6,12,7,0.6)', borderRadius: '6px', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '3px' },
+  wrapper:       { padding: '24px', maxWidth: '1300px' },
+  header:        { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' },
+  title:         { fontFamily: "'Syne', sans-serif", fontSize: '24px', fontWeight: 700, color: '#f0fdf4' },
+  subtitle:      { fontSize: '13px', color: '#6b7280', marginTop: '4px' },
+  addBtn:        { display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 16px', borderRadius: '10px', border: '1px solid', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", transition: 'all 0.2s', whiteSpace: 'nowrap' },
+  formCard:      { background: '#0d1510', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '16px', padding: '20px', marginBottom: '20px' },
+  formTitle:     { fontFamily: "'Syne', sans-serif", fontSize: '14px', fontWeight: 600, color: '#f0fdf4', marginBottom: '6px' },
+  formDesc:      { fontSize: '12px', color: '#6b7280', marginBottom: '16px', lineHeight: 1.6 },
+  formGrid:      { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' },
+  fieldGroup:    { display: 'flex', flexDirection: 'column', gap: '5px' },
+  label:         { fontSize: '11px', fontWeight: 500, color: '#86efac', letterSpacing: '0.4px' },
+  hint:          { color: '#4b5563', fontWeight: 400, fontSize: '10px' },
+  input:         { padding: '9px 12px', background: 'rgba(6,12,7,0.8)', border: '1px solid rgba(34,197,94,0.15)', borderRadius: '8px', color: '#f0fdf4', fontSize: '13px', fontFamily: "'DM Sans', sans-serif" },
+  errorMsg:      { fontSize: '11px', color: '#f87171', marginTop: '3px' },
+  submitBtn:     { width: '100%', padding: '10px', background: 'linear-gradient(135deg, #16a34a, #15803d)', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" },
+  filters:       { display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' },
+  searchWrap:    { position: 'relative', flex: 1, minWidth: '180px' },
+  searchIcon:    { position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', color: '#4ade80' },
+  search:        { width: '100%', padding: '9px 14px 9px 34px', background: '#0d1510', border: '1px solid rgba(34,197,94,0.15)', borderRadius: '8px', color: '#f0fdf4', fontSize: '13px', fontFamily: "'DM Sans', sans-serif" },
+  select:        { padding: '9px 12px', background: '#0d1510', border: '1px solid rgba(34,197,94,0.15)', borderRadius: '8px', color: '#9ca3af', fontSize: '13px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" },
+  countTag:      { background: 'rgba(34,197,94,0.08)', color: '#4ade80', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', border: '1px solid rgba(34,197,94,0.15)', whiteSpace: 'nowrap' },
+  catBadge:      { padding: '3px 8px', borderRadius: '20px', fontSize: '10px', fontWeight: 600, whiteSpace: 'nowrap' },
+  layout:        { display: 'flex', gap: '16px', flexWrap: 'wrap' },
+  tableCard:     { flex: 1, minWidth: '300px', background: '#0d1510', border: '1px solid rgba(34,197,94,0.1)', borderRadius: '16px', overflow: 'hidden' },
+  detailPanel:   { width: '320px', background: '#0d1510', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '16px', padding: '18px', height: 'fit-content', maxHeight: '90vh', overflowY: 'auto' },
+  detailHeader:  { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' },
+  detailId:      { fontFamily: 'monospace', color: '#4ade80', fontSize: '14px', fontWeight: 700 },
+  detailSerial:  { fontSize: '11px', color: '#6b7280', marginTop: '2px' },
+  closeBtn:      { background: 'none', border: 'none', color: '#4b5563', cursor: 'pointer', fontSize: '14px' },
+  tabs:          { display: 'flex', gap: '2px', marginBottom: '14px', background: 'rgba(6,12,7,0.6)', borderRadius: '8px', padding: '4px' },
+  tab:           { flex: 1, padding: '6px 4px', borderRadius: '6px', border: 'none', background: 'transparent', color: '#6b7280', fontSize: '10px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", transition: 'all 0.15s', whiteSpace: 'nowrap' },
+  tabActive:     { background: 'rgba(34,197,94,0.15)', color: '#22c55e' },
+  detailGrid:    { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' },
+  detailItem:    { background: 'rgba(6,12,7,0.6)', borderRadius: '8px', padding: '8px 10px' },
+  detailLabel:   { fontSize: '10px', color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '3px' },
+  detailValue:   { fontSize: '12px', fontWeight: 600, color: '#f0fdf4' },
+  metricasCard:  { background: 'rgba(6,12,7,0.6)', borderRadius: '8px', padding: '10px', marginBottom: '10px' },
+  metricasTitle: { fontSize: '11px', color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '8px' },
+  metricasList:  { display: 'flex', flexWrap: 'wrap', gap: '5px' },
+  metricaTag:    { background: 'rgba(34,197,94,0.1)', color: '#4ade80', padding: '2px 8px', borderRadius: '4px', fontSize: '11px' },
+  hvSection:     { background: 'rgba(6,12,7,0.5)', borderRadius: '10px', padding: '12px', border: '1px solid rgba(34,197,94,0.08)' },
+  hvTitle:       { fontFamily: "'Syne', sans-serif", fontSize: '11px', fontWeight: 600, color: '#86efac', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.6px' },
+  hvItem:        { background: 'rgba(6,12,7,0.6)', borderRadius: '6px', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '3px' },
+  miniForm:      { background: 'rgba(6,12,7,0.5)', borderRadius: '10px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px', border: '1px solid rgba(34,197,94,0.08)' },
+  miniFormTitle: { fontSize: '12px', fontWeight: 600, color: '#86efac', marginBottom: '4px' },
 }

@@ -36,6 +36,8 @@ export const dispositivosAPI = {
   registrar:   (data)          => api.post('/dispositivos/api/v1/dispositivos/', data),
   actualizar:  (id, data)      => api.put(`/dispositivos/api/v1/dispositivos/${id}`, data),
   hojaVida:    (id)            => api.get(`/dispositivos/api/v1/dispositivos/${id}/hoja-de-vida`),
+  mantenimientos: (id)       => api.get(`/dispositivos/api/v1/dispositivos/${id}/mantenimiento`),
+  registrarMant:  (id, data) => api.post(`/dispositivos/api/v1/dispositivos/${id}/mantenimiento`, data),
 }
 
 // ── Ingesta :8002 ─────────────────────────────────────
