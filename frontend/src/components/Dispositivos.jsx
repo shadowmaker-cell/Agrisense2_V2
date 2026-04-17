@@ -317,51 +317,70 @@ export default function Dispositivos() {
   }
 
   const handleActualizar = async () => {
-    if (!selected) return
-    setEditMsg('')
-    const payload = {}
-    if (editForm.estado)                   payload.estado             = editForm.estado
-    if (editForm.limite_minimo !== '')      payload.limite_minimo      = parseFloat(editForm.limite_minimo)
-    if (editForm.limite_maximo !== '')      payload.limite_maximo      = parseFloat(editForm.limite_maximo)
-    if (editForm.parcela_id !== '')         payload.parcela_id         = parseInt(editForm.parcela_id)
-    if (editForm.parcela_nombre)            payload.parcela_nombre     = editForm.parcela_nombre
-    if (editForm.posicion_campo)            payload.posicion_campo     = editForm.posicion_campo
-    if (editForm.intervalo_muestreo !== '') payload.intervalo_muestreo = parseInt(editForm.intervalo_muestreo)
-    if (editForm.umbral_bateria !== '')     payload.umbral_bateria     = parseInt(editForm.umbral_bateria)
-    try {
-      await dispositivosAPI.actualizar(selected.id, payload)
-      setEditMsg('Configuracion actualizada correctamente')
-      await load()
-    } catch(e) { setEditMsg('Error al actualizar') }
-  }
+  if (!selected) return
+  setEditMsg('')
+  const payload = {}
+  if (editForm.estado)                   payload.estado             = editForm.estado
+  if (editForm.limite_minimo !== '')      payload.limite_minimo      = parseFloat(editForm.limite_minimo)
+  if (editForm.limite_maximo !== '')      payload.limite_maximo      = parseFloat(editForm.limite_maximo)
+  if (editForm.parcela_id !== '')         payload.parcela_id         = parseInt(editForm.parcela_id)
+  if (editForm.parcela_nombre)            payload.parcela_nombre     = editForm.parcela_nombre
+  if (editForm.posicion_campo)            payload.posicion_campo     = editForm.posicion_campo
+  if (editForm.intervalo_muestreo !== '') payload.intervalo_muestreo = parseInt(editForm.intervalo_muestreo)
+  if (editForm.umbral_bateria !== '')     payload.umbral_bateria     = parseInt(editForm.umbral_bateria)
+  try {
+    await dispositivosAPI.actualizar(selected.id, payload)
+    if (editForm.parcela_id && editForm.parcela_id !== '') {
+      try {
+        await parcelasAPI.asignarSensor(parseInt(editForm.parcela_id), {
+          id_logico:      selected.id_logico,
+          dispositivo_id: selected.id,
+          notas:          editForm.posicion_campo || '',
+        })
+      } catch(e) { console.warn('No se pudo sincronizar con parcelas:', e) }
+    }
+    setEditMsg('Configuracion actualizada correctamente')
+    await load()
+  } catch(e) { setEditMsg('Error al actualizar') }
+}
 
   const handleRegistrar = async (e) => {
-    e.preventDefault()
-    const errores = validarCampos(form)
-    if (Object.keys(errores).length > 0) { setFormErrores(errores); setFormMsg('Corrige los errores'); return }
-    if (!form.tipo_dispositivo_id) { setFormMsg('Selecciona un tipo de dispositivo'); return }
-    setFormLoading(true); setFormMsg('')
-    try {
-      const payload = {
-        tipo_dispositivo_id: parseInt(form.tipo_dispositivo_id),
-        id_logico:           form.id_logico,
-        numero_serial:       form.numero_serial,
-        version_firmware:    form.version_firmware,
-        estado:              form.estado,
-      }
-      if (form.parcela_id)           payload.parcela_id     = parseInt(form.parcela_id)
-      if (form.parcela_nombre)       payload.parcela_nombre = form.parcela_nombre
-      if (form.posicion_campo)       payload.posicion_campo = form.posicion_campo
-      if (form.limite_minimo !== '') payload.limite_minimo  = parseFloat(form.limite_minimo)
-      if (form.limite_maximo !== '') payload.limite_maximo  = parseFloat(form.limite_maximo)
-      await dispositivosAPI.registrar(payload)
-      setFormMsg('Sensor registrado exitosamente')
-      await load()
-      setTimeout(() => { setShowForm(false); setFormMsg('') }, 1500)
-    } catch(e) {
-      setFormMsg(e?.response?.data?.detail || 'Error al registrar el sensor')
-    } finally { setFormLoading(false) }
-  }
+  e.preventDefault()
+  const errores = validarCampos(form)
+  if (Object.keys(errores).length > 0) { setFormErrores(errores); setFormMsg('Corrige los errores'); return }
+  if (!form.tipo_dispositivo_id) { setFormMsg('Selecciona un tipo de dispositivo'); return }
+  setFormLoading(true); setFormMsg('')
+  try {
+    const payload = {
+      tipo_dispositivo_id: parseInt(form.tipo_dispositivo_id),
+      id_logico:           form.id_logico,
+      numero_serial:       form.numero_serial,
+      version_firmware:    form.version_firmware,
+      estado:              form.estado,
+    }
+    if (form.parcela_id)           payload.parcela_id     = parseInt(form.parcela_id)
+    if (form.parcela_nombre)       payload.parcela_nombre = form.parcela_nombre
+    if (form.posicion_campo)       payload.posicion_campo = form.posicion_campo
+    if (form.limite_minimo !== '') payload.limite_minimo  = parseFloat(form.limite_minimo)
+    if (form.limite_maximo !== '') payload.limite_maximo  = parseFloat(form.limite_maximo)
+    const res = await dispositivosAPI.registrar(payload)
+    const nuevoId = res.data?.id
+    if (form.parcela_id && nuevoId) {
+      try {
+        await parcelasAPI.asignarSensor(parseInt(form.parcela_id), {
+          id_logico:      form.id_logico,
+          dispositivo_id: nuevoId,
+          notas:          form.posicion_campo || '',
+        })
+      } catch(e) { console.warn('No se pudo sincronizar con parcelas:', e) }
+    }
+    setFormMsg('Sensor registrado exitosamente')
+    await load()
+    setTimeout(() => { setShowForm(false); setFormMsg('') }, 1500)
+  } catch(e) {
+    setFormMsg(e?.response?.data?.detail || 'Error al registrar el sensor')
+  } finally { setFormLoading(false) }
+}
 
   const getTipo    = (id) => tipos.find(t => t.id === id)
   const categorias = ['todos', ...new Set(tipos.map(t => t.categoria).filter(Boolean))]
