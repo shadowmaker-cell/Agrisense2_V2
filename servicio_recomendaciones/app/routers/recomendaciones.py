@@ -28,12 +28,12 @@ class AlertaEntrada(PydanticBase):
     tipo_alerta:    str
     tipo_metrica:   str
     valor:          float
-    id_logico:      Optional[str]   = None
-    parcela_id:     Optional[int]   = None
-    severidad:      str             = "media"
-    condicion:      str             = ""
-    tipo_cultivo:   str             = "maiz"
-    area_hectareas: float           = 1.0
+    id_logico:      Optional[str]  = None
+    parcela_id:     Optional[int]  = None
+    severidad:      str            = "media"
+    condicion:      str            = ""
+    tipo_cultivo:   str            = "maiz"
+    area_hectareas: float          = 1.0
 
 
 # ── Health ────────────────────────────────────────────
@@ -84,10 +84,10 @@ def post_desde_alerta(
             "altas":           resultado["altas"],
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generando recomendaciones: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 
-# ── Listar ────────────────────────────────────────────
+# ── Rutas especificas antes de parametros ─────────────
 @router.get("/activas", response_model=List[RecomendacionRespuesta])
 def get_activas(
     request: Request,
@@ -141,6 +141,17 @@ def get_recomendaciones(
     return listar_recomendaciones(db, parcela_id, id_logico, prioridad, estado, limite, usuario_id)
 
 
+@router.post("/", response_model=RecomendacionRespuesta, status_code=201)
+def post_recomendacion(
+    payload: RecomendacionEntrada,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    usuario_id = get_usuario_id_opcional(request)
+    return crear_recomendacion_manual(db, payload, usuario_id)
+
+
+# ── Rutas con parametros al final ─────────────────────
 @router.get("/{rec_id}", response_model=RecomendacionRespuesta)
 def get_recomendacion(
     rec_id: int,
@@ -152,16 +163,6 @@ def get_recomendacion(
     if not rec:
         raise HTTPException(status_code=404, detail="Recomendacion no encontrada")
     return rec
-
-
-@router.post("/", response_model=RecomendacionRespuesta, status_code=201)
-def post_recomendacion(
-    payload: RecomendacionEntrada,
-    request: Request,
-    db: Session = Depends(get_db)
-):
-    usuario_id = get_usuario_id_opcional(request)
-    return crear_recomendacion_manual(db, payload, usuario_id)
 
 
 @router.put("/{rec_id}/estado", response_model=RecomendacionRespuesta)
