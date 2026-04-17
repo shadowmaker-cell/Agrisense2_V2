@@ -126,7 +126,6 @@ def procesar_lectura(token, sensor, valor):
         "valor_metrica":  valor,
         "unidad":         sensor["unidad"],
     }
-    # Pasar límites personalizados si existen
     if sensor.get("limite_minimo") is not None:
         payload["limite_minimo"] = sensor["limite_minimo"]
     if sensor.get("limite_maximo") is not None:
@@ -139,8 +138,7 @@ def procesar_lectura(token, sensor, valor):
     return res.json() if res.status_code == 201 else {}
 
 
-def enviar_notificacion(token, usuario_email, sensor, valor, tipos_alerta, n_alertas):
-    severidad = "critica" if n_alertas > 1 else "alta"
+def enviar_notificacion(token, usuario_email, sensor, valor, tipos_alerta, severidad):
     payload = {
         "dispositivo_id": sensor["db_id"],
         "id_logico":      sensor["id_logico"],
@@ -154,6 +152,23 @@ def enviar_notificacion(token, usuario_email, sensor, valor, tipos_alerta, n_ale
     }
     res = requests.post(
         f"{API_BASE}/api/notificaciones/api/v1/notificaciones/enviar",
+        json=payload, headers=headers(token)
+    )
+    return res.status_code == 201
+
+
+def generar_recomendacion_automatica(token, sensor, valor, tipos_alerta, severidad):
+    """Genera recomendaciones automáticas basadas en la alerta detectada."""
+    payload = {
+        "tipo_alerta":  tipos_alerta[0],
+        "tipo_metrica": sensor["tipo_metrica"],
+        "valor":        valor,
+        "id_logico":    sensor["id_logico"],
+        "severidad":    severidad,
+        "condicion":    f"Valor {valor} {sensor['unidad']} — {', '.join(tipos_alerta)}",
+    }
+    res = requests.post(
+        f"{API_BASE}/api/recomendaciones/api/v1/recomendaciones/desde-alerta",
         json=payload, headers=headers(token)
     )
     return res.status_code == 201
@@ -201,14 +216,14 @@ def main():
         )
         config = d.get("configuracion") or {}
         sensores.append({
-            "db_id":          d["id"],
-            "id_logico":      d["id_logico"],
-            "tipo_metrica":   metrica,
-            "unidad":         unidad,
-            "min":            vmin,
-            "max":            vmax,
-            "limite_minimo":  config.get("limite_minimo"),
-            "limite_maximo":  config.get("limite_maximo"),
+            "db_id":         d["id"],
+            "id_logico":     d["id_logico"],
+            "tipo_metrica":  metrica,
+            "unidad":        unidad,
+            "min":           vmin,
+            "max":           vmax,
+            "limite_minimo": config.get("limite_minimo"),
+            "limite_maximo": config.get("limite_maximo"),
         })
 
     if not sensores:
@@ -236,6 +251,7 @@ def main():
     total_lecturas = 0
     total_alertas  = 0
     total_notif    = 0
+    total_rec      = 0
 
     try:
         while True:
@@ -258,22 +274,31 @@ def main():
 
                 if n_alertas > 0:
                     total_alertas += n_alertas
+                    severidad = "critica" if n_alertas > 1 else "alta"
+
                     ok_notif = enviar_notificacion(
-                        token, usuario_email, sensor, valor, tipos, n_alertas
+                        token, usuario_email, sensor, valor, tipos, severidad
                     )
                     if ok_notif:
                         total_notif += 1
+
+                    ok_rec = generar_recomendacion_automatica(
+                        token, sensor, valor, tipos, severidad
+                    )
+                    if ok_rec:
+                        total_rec += 1
+
                     print(
                         f"  ⚠️  {sensor['id_logico']}: {valor} {sensor['unidad']} "
                         f"→ {n_alertas} alerta(s): {', '.join(tipos)} "
-                        f"{'📧' if ok_notif else ''}"
+                        f"{'📧' if ok_notif else ''} {'🤖' if ok_rec else ''}"
                     )
                 else:
                     print(f"  ✓  {sensor['id_logico']}: {valor} {sensor['unidad']}")
 
             print(
                 f"     Total: {total_lecturas} lecturas · "
-                f"{total_alertas} alertas · {total_notif} notificaciones\n"
+                f"{total_alertas} alertas · {total_notif} notif · {total_rec} rec\n"
             )
             time.sleep(intervalo)
 
@@ -281,224 +306,7 @@ def main():
         print(f"\n🛑 Simulador detenido.")
         print(
             f"   Ciclos: {ciclo} · Lecturas: {total_lecturas} · "
-            f"Alertas: {total_alertas} · Notificaciones: {total_notif}"
-        )
-
-
-if __name__ == "__main__":
-    main()
-
-
-def headers(token):
-    return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-
-
-def login(email, password):
-    res = requests.post(
-        f"{API_BASE}/api/auth/api/v1/auth/login",
-        json={"email": email, "password": password}
-    )
-    if res.status_code == 200:
-        data  = res.json()
-        token = data.get("access_token")
-        uid   = data.get("usuario", {}).get("id")
-        print(f"✅ Login exitoso — {email} (id={uid})")
-        return token, uid
-    print(f"❌ Error login: {res.status_code} — {res.text}")
-    return None, None
-
-
-def obtener_email_propio(token):
-    """Obtiene el email del usuario autenticado."""
-    res = requests.get(
-        f"{API_BASE}/api/auth/api/v1/usuarios/me",
-        headers=headers(token)
-    )
-    if res.status_code == 200:
-        return res.json().get("email", "")
-    return ""
-
-
-def obtener_dispositivos(token):
-    res = requests.get(
-        f"{API_BASE}/api/dispositivos/api/v1/dispositivos/",
-        headers=headers(token)
-    )
-    return res.json() if res.status_code == 200 else []
-
-
-def enviar_lectura(token, sensor, valor):
-    payload = {
-        "dispositivo_id": sensor["db_id"],
-        "id_logico":      sensor["id_logico"],
-        "tipo_metrica":   sensor["tipo_metrica"],
-        "valor_metrica":  valor,
-        "unidad":         sensor["unidad"],
-    }
-    res = requests.post(
-        f"{API_BASE}/api/ingesta/api/v1/telemetria/",
-        json=payload, headers=headers(token)
-    )
-    return res.status_code == 201
-
-
-def procesar_lectura(token, sensor, valor):
-    payload = {
-        "dispositivo_id": sensor["db_id"],
-        "id_logico":      sensor["id_logico"],
-        "tipo_metrica":   sensor["tipo_metrica"],
-        "valor_metrica":  valor,
-        "unidad":         sensor["unidad"],
-    }
-    res = requests.post(
-        f"{API_BASE}/api/procesamiento/api/v1/procesamiento/manual",
-        json=payload, headers=headers(token)
-    )
-    return res.json() if res.status_code == 201 else {}
-
-
-def enviar_notificacion(token, usuario_email, sensor, valor, tipos_alerta, n_alertas):
-    """Envia notificacion con email del usuario incluido."""
-    severidad = "critica" if n_alertas > 1 else "alta"
-    payload = {
-        "dispositivo_id": sensor["db_id"],
-        "id_logico":      sensor["id_logico"],
-        "tipo_alerta":    tipos_alerta[0],
-        "tipo_metrica":   sensor["tipo_metrica"],
-        "valor":          valor,
-        "condicion":      f"Valor {valor} {sensor['unidad']} — {', '.join(tipos_alerta)}",
-        "severidad":      severidad,
-        "canal":          "email",
-        "email_destino":  usuario_email,
-    }
-    res = requests.post(
-        f"{API_BASE}/api/notificaciones/api/v1/notificaciones/enviar",
-        json=payload, headers=headers(token)
-    )
-    return res.status_code == 201
-
-
-def simular_valor(sensor):
-    rango = sensor["max"] - sensor["min"]
-    base  = (sensor["max"] + sensor["min"]) / 2
-    if random.random() < 0.15:
-        valor = sensor["min"] + random.uniform(0, rango * 0.1)
-    elif random.random() < 0.15:
-        valor = sensor["max"] - random.uniform(0, rango * 0.1)
-    else:
-        valor = base + random.gauss(0, rango * 0.1)
-    return round(max(sensor["min"], min(sensor["max"], valor)), 2)
-
-
-def main():
-    print("=" * 55)
-    print("  AgriSense — Simulador IoT")
-    print("=" * 55)
-
-    email    = input("Email: ").strip()
-    password = input("Password: ").strip()
-
-    token, usuario_id = login(email, password)
-    if not token:
-        return
-
-    usuario_email = obtener_email_propio(token)
-    print(f"📧 Notificaciones se enviaran a: {usuario_email}")
-
-    dispositivos = obtener_dispositivos(token)
-    if not dispositivos:
-        print("❌ No hay sensores registrados.")
-        print("   Registra sensores en la seccion Dispositivos.")
-        return
-
-    sensores = []
-    for d in dispositivos:
-        if d.get("estado") != "activo":
-            continue
-        tipo_id = d.get("tipo_dispositivo_id", 1)
-        metrica, unidad, vmin, vmax = TIPO_METRICA_MAP.get(
-            tipo_id, ("humedad_suelo", "%", 0, 100)
-        )
-        sensores.append({
-            "db_id":        d["id"],
-            "id_logico":    d["id_logico"],
-            "tipo_metrica": metrica,
-            "unidad":       unidad,
-            "min":          vmin,
-            "max":          vmax,
-        })
-
-    if not sensores:
-        print("❌ No hay sensores activos.")
-        return
-
-    intervalo = 10
-    try:
-        intervalo = int(
-            input(f"Intervalo entre lecturas en segundos [{intervalo}]: ").strip() or intervalo
-        )
-    except ValueError:
-        pass
-
-    print(f"\n✅ {len(sensores)} sensores activos:")
-    for s in sensores:
-        print(f"   • {s['id_logico']} — {s['tipo_metrica']} ({s['unidad']})")
-
-    print(f"\n⏱  Enviando lecturas cada {intervalo}s — Ctrl+C para detener\n")
-
-    ciclo          = 0
-    total_lecturas = 0
-    total_alertas  = 0
-    total_notif    = 0
-
-    try:
-        while True:
-            ciclo += 1
-            print(f"── Ciclo {ciclo} — {datetime.now().strftime('%H:%M:%S')} ──────")
-
-            for sensor in sensores:
-                valor = simular_valor(sensor)
-
-                # 1. Ingesta
-                ok_ingesta = enviar_lectura(token, sensor, valor)
-                if not ok_ingesta:
-                    print(f"  ✗  {sensor['id_logico']}: error en ingesta")
-                    continue
-
-                total_lecturas += 1
-
-                # 2. Procesamiento
-                resultado = procesar_lectura(token, sensor, valor)
-                n_alertas = resultado.get("alertas_generadas", 0)
-                tipos     = resultado.get("tipos_alerta", [])
-
-                if n_alertas > 0:
-                    total_alertas += n_alertas
-                    # 3. Notificacion con email
-                    ok_notif = enviar_notificacion(
-                        token, usuario_email, sensor, valor, tipos, n_alertas
-                    )
-                    if ok_notif:
-                        total_notif += 1
-                    print(
-                        f"  ⚠️  {sensor['id_logico']}: {valor} {sensor['unidad']} "
-                        f"→ {n_alertas} alerta(s): {', '.join(tipos)} "
-                        f"{'📧' if ok_notif else '✗'}"
-                    )
-                else:
-                    print(f"  ✓  {sensor['id_logico']}: {valor} {sensor['unidad']}")
-
-            print(
-                f"     Total: {total_lecturas} lecturas · "
-                f"{total_alertas} alertas · {total_notif} notificaciones\n"
-            )
-            time.sleep(intervalo)
-
-    except KeyboardInterrupt:
-        print(f"\n🛑 Simulador detenido.")
-        print(
-            f"   Ciclos: {ciclo} · Lecturas: {total_lecturas} · "
-            f"Alertas: {total_alertas} · Notificaciones: {total_notif}"
+            f"Alertas: {total_alertas} · Notif: {total_notif} · Rec: {total_rec}"
         )
 
 
