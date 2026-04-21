@@ -379,4 +379,4 @@ Cada sensor tiene una hoja de vida completa que incluye historial de cambios de 
 
 ---
 
-AgriSense2 — Plataforma de Agricultura de Precision · Ingenieria de Sistemas 2026
+AgriSense2 — Plataforma de Agricultura de Precision 
