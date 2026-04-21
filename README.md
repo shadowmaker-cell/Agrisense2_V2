@@ -45,12 +45,12 @@ Una plataforma con 8 microservicios independientes que procesan lecturas de sens
 |                    nginx :8000                              |
 |         https://agrisense-gateway.onrender.com              |
 +--+------+------+------+------+------+------+------+--------+
-   |      |      |      |      |      |      |      |
-   v      v      v      v      v      v      v      v
- Auth  Disp  Inge  Proc  Noti  Parc   ML   Reco
+   |      |      |      |      |      |      |      
+   v      v      v      v      v      v      v      
+ Auth  Disp  Inge  Proc  Noti  Parc   ML   Reco    
 :8008 :8001 :8002 :8003 :8004 :8005 :8006 :8007
-   |      |      |      |      |      |      |      |
-   +------+------+------+------+------+------+------+
+   |      |      |      |      |      |      |      
+   +------+------+------+------+------+------+
                          |
               +----------v----------+
               |   Neon PostgreSQL   |
