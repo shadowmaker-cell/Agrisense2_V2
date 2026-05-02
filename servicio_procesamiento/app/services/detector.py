@@ -56,7 +56,11 @@ def procesar_evento_telemetria(db: Session, datos: dict) -> dict:
         tiene_alerta=False,
     )
     db.add(evento)
-    db.flush()
+    try:
+        db.flush()
+    except Exception:
+        db.rollback()
+        raise
 
     # Si no vienen límites en el payload los buscamos en dispositivos
     if limite_minimo is None and limite_maximo is None and id_logico:
