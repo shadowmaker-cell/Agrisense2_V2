@@ -1,0 +1,159 @@
+{
+  "title": "AgriSense2 — Monitoreo de Microservicios",
+  "uid": "agrisense-main",
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Servicios Online",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [{
+        "expr": "count(up == 1)",
+        "legendFormat": "Online"
+      }],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "yellow", "value": 5 },
+              { "color": "green", "value": 8 }
+            ]
+          },
+          "mappings": []
+        }
+      },
+      "datasource": "Prometheus"
+    },
+    {
+      "id": 2,
+      "title": "Estado de cada servicio (1=online, 0=caido)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 18, "x": 6, "y": 0 },
+      "targets": [{
+        "expr": "up",
+        "legendFormat": "{{ job }}"
+      }],
+      "options": { "colorMode": "background", "graphMode": "none" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      },
+      "datasource": "Prometheus"
+    },
+    {
+      "id": 3,
+      "title": "Peticiones por segundo por servicio",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [{
+        "expr": "rate(http_requests_total[1m])",
+        "legendFormat": "{{ job }} — {{ handler }}"
+      }],
+      "datasource": "Prometheus"
+    },
+    {
+      "id": 4,
+      "title": "Latencia P95 por servicio (segundos)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [{
+        "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))",
+        "legendFormat": "P95 {{ job }}"
+      }],
+      "datasource": "Prometheus"
+    },
+    {
+      "id": 5,
+      "title": "Errores HTTP 5xx por servicio",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "targets": [{
+        "expr": "rate(http_requests_total{status=~\"5..\"}[5m])",
+        "legendFormat": "5xx {{ job }}"
+      }],
+      "datasource": "Prometheus"
+    },
+    {
+      "id": 6,
+      "title": "Peticiones en progreso",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [{
+        "expr": "http_requests_in_progress",
+        "legendFormat": "En progreso {{ job }}"
+      }],
+      "datasource": "Prometheus"
+    },
+    {
+      "id": 7,
+      "title": "Lecturas IoT procesadas (ingesta)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 20 },
+      "targets": [{
+        "expr": "increase(http_requests_total{job=\"agrisense-ingesta\", handler=\"/api/v1/telemetria/\", method=\"POST\"}[1h])",
+        "legendFormat": "Lecturas ultima hora"
+      }],
+      "datasource": "Prometheus"
+    },
+    {
+      "id": 8,
+      "title": "Alertas generadas (procesamiento)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 20 },
+      "targets": [{
+        "expr": "increase(http_requests_total{job=\"agrisense-procesamiento\", handler=\"/api/v1/procesamiento/manual\", method=\"POST\"}[1h])",
+        "legendFormat": "Procesadas ultima hora"
+      }],
+      "datasource": "Prometheus"
+    },
+    {
+      "id": 9,
+      "title": "Notificaciones enviadas",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 20 },
+      "targets": [{
+        "expr": "increase(http_requests_total{job=\"agrisense-notificaciones\", handler=\"/api/v1/notificaciones/enviar\", method=\"POST\"}[1h])",
+        "legendFormat": "Notificaciones ultima hora"
+      }],
+      "datasource": "Prometheus"
+    },
+    {
+      "id": 10,
+      "title": "Tasa de errores por servicio (%)",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 24 },
+      "targets": [{
+        "expr": "100 * rate(http_requests_total{status=~\"5..\"}[5m]) / rate(http_requests_total[5m])",
+        "legendFormat": "{{ job }}"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      },
+      "datasource": "Prometheus"
+    }
+  ]
+}
