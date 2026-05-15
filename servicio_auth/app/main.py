@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_fastapi_instrumentator import Instrumentator
 from app.routers import auth, usuarios
 from app.database import SessionLocal, engine
 from app.models.usuario import Base
@@ -14,7 +15,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Auth Service",
-    description="Servicio de autenticacion y gestion de usuarios AgriSense — Ley 1581 de 2012",
+    description="Servicio de autenticacion y gestion de usuarios AgriSense",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -27,14 +28,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+Instrumentator(
+    should_group_status_codes=True,
+    should_ignore_untemplated=True,
+    should_instrument_requests_inprogress=True,
+    excluded_handlers=["/health", "/metrics"],
+).instrument(app).expose(app, endpoint="/metrics")
+
 app.include_router(auth.router)
 app.include_router(usuarios.router)
 
 
 @app.get("/health")
 def health_check():
-    return {
-        "estado":   "ok",
-        "servicio": "auth-service",
-        "version":  "1.0.0",
-    }
+    return {"estado": "ok", "servicio": "auth-service", "version": "1.0.0"}

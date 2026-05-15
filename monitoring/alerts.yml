@@ -1,0 +1,48 @@
+groups:
+  - name: agrisense_alertas
+    rules:
+
+      - alert: ServicioNoDisponible
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critica
+        annotations:
+          summary: "Servicio caido: {{ $labels.job }}"
+          description: "El servicio {{ $labels.job }} lleva mas de 1 minuto sin responder."
+
+      - alert: LatenciaAltaP95
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 2m
+        labels:
+          severity: alta
+        annotations:
+          summary: "Latencia P95 alta en {{ $labels.job }}"
+          description: "El percentil 95 de latencia supera los 2 segundos en {{ $labels.job }}."
+
+      - alert: TasaErroresAlta
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: alta
+        annotations:
+          summary: "Tasa de errores 5xx alta en {{ $labels.job }}"
+          description: "Mas del 5% de peticiones retornan error 5xx en {{ $labels.job }}."
+
+      - alert: MuchasAlertas
+        expr: rate(http_requests_total{handler="/api/v1/procesamiento/manual"}[5m]) > 10
+        for: 1m
+        labels:
+          severity: media
+        annotations:
+          summary: "Alto volumen de procesamiento en agrisense-procesamiento"
+          description: "Se estan procesando mas de 10 lecturas por segundo."
+
+      - alert: IngestaSaturada
+        expr: http_requests_in_progress{job="agrisense-ingesta"} > 50
+        for: 1m
+        labels:
+          severity: alta
+        annotations:
+          summary: "Servicio de ingesta saturado"
+          description: "Hay mas de 50 peticiones concurrentes en el servicio de ingesta IoT."

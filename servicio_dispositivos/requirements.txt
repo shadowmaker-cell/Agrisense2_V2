@@ -12,3 +12,4 @@ python-jose[cryptography]
 passlib[bcrypt]
 pytest
 httpx
+prometheus-fastapi-instrumentator==7.1.0

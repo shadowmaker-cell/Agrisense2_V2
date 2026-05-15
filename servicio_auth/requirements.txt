@@ -12,3 +12,4 @@ python-multipart
 pytest
 httpx
 email-validator
+prometheus-fastapi-instrumentator==7.1.0

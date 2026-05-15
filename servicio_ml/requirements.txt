@@ -14,3 +14,5 @@ pytest
 httpx
 kafka-python
 python-jose[cryptography]
+
+prometheus-fastapi-instrumentator==7.1.0

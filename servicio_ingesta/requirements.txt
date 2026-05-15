@@ -12,3 +12,4 @@ httpx
 slowapi
 openpyxl
 python-jose[cryptography]
+prometheus-fastapi-instrumentator==7.1.0

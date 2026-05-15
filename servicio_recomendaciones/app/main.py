@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from prometheus_fastapi_instrumentator import Instrumentator
 from app.routers import recomendaciones
 from app.database import SessionLocal, engine
 from app.models import recomendacion as models_rec
@@ -8,16 +9,15 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Crear tablas si no existen
     try:
         models_rec.Base.metadata.create_all(bind=engine)
         logger.info("Tablas de recomendaciones verificadas")
     except Exception as e:
         logger.error(f"Error creando tablas: {e}")
 
-    # Inicializar categorias
     db = SessionLocal()
     try:
         inicializar_categorias(db)
@@ -27,6 +27,7 @@ async def lifespan(app: FastAPI):
         db.close()
     yield
 
+
 app = FastAPI(
     title="Recommendation Engine",
     description="Motor de recomendaciones agronomicas para AgriSense",
@@ -34,12 +35,16 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+Instrumentator(
+    should_group_status_codes=True,
+    should_ignore_untemplated=True,
+    should_instrument_requests_inprogress=True,
+    excluded_handlers=["/health", "/metrics"],
+).instrument(app).expose(app, endpoint="/metrics")
+
 app.include_router(recomendaciones.router)
+
 
 @app.get("/health")
 def health_check():
-    return {
-        "estado":   "ok",
-        "servicio": "recommendation-engine",
-        "version":  "1.0.0",
-    }
+    return {"estado": "ok", "servicio": "recommendation-engine", "version": "1.0.0"}

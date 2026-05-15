@@ -1,0 +1,58 @@
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'agrisense'
+
+rule_files:
+  - "alerts.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+scrape_configs:
+  - job_name: 'agrisense-auth'
+    static_configs:
+      - targets: ['servicio-auth:8008']
+    metrics_path: '/metrics'
+
+  - job_name: 'agrisense-dispositivos'
+    static_configs:
+      - targets: ['servicio-dispositivos:8001']
+    metrics_path: '/metrics'
+
+  - job_name: 'agrisense-ingesta'
+    static_configs:
+      - targets: ['servicio-ingesta:8002']
+    metrics_path: '/metrics'
+
+  - job_name: 'agrisense-procesamiento'
+    static_configs:
+      - targets: ['servicio-procesamiento:8003']
+    metrics_path: '/metrics'
+
+  - job_name: 'agrisense-notificaciones'
+    static_configs:
+      - targets: ['servicio-notificaciones:8004']
+    metrics_path: '/metrics'
+
+  - job_name: 'agrisense-parcelas'
+    static_configs:
+      - targets: ['servicio-parcelas:8005']
+    metrics_path: '/metrics'
+
+  - job_name: 'agrisense-ml'
+    static_configs:
+      - targets: ['servicio-ml:8006']
+    metrics_path: '/metrics'
+
+  - job_name: 'agrisense-recomendaciones'
+    static_configs:
+      - targets: ['servicio-recomendaciones:8007']
+    metrics_path: '/metrics'
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

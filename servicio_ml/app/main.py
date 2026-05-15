@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from prometheus_fastapi_instrumentator import Instrumentator
 from app.routers import predicciones
 from app.database import SessionLocal
 from app.services.prediccion_service import inicializar_modelos
@@ -22,13 +23,16 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+Instrumentator(
+    should_group_status_codes=True,
+    should_ignore_untemplated=True,
+    should_instrument_requests_inprogress=True,
+    excluded_handlers=["/health", "/metrics"],
+).instrument(app).expose(app, endpoint="/metrics")
+
 app.include_router(predicciones.router)
 
 
 @app.get("/health")
 def health_check():
-    return {
-        "estado":   "ok",
-        "servicio": "ml-prediction-service",
-        "version":  "1.0.0",
-    }
+    return {"estado": "ok", "servicio": "ml-prediction-service", "version": "1.0.0"}
